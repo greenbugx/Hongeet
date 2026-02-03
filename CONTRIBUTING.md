@@ -44,7 +44,7 @@ Please check existing issues and pull requests before starting.
 
 ### Setup
 ```
-git clone https://github.com/<your-username>/hongeet.git
+git clone https://github.com/greenbugx/hongeet.git
 cd hongeet
 flutter pub get
 flutter run
