@@ -11,6 +11,8 @@ import '../../data/api/local_backend_api.dart';
 import '../../core/utils/app_messenger.dart';
 import '../../core/theme/app_theme.dart';
 
+import '../../features/library/playlist_manager.dart';
+
 class FullPlayerSheet extends StatelessWidget {
   const FullPlayerSheet({super.key});
 
@@ -203,78 +205,131 @@ class FullPlayerSheet extends StatelessWidget {
 
                                 const SizedBox(height: 12),
 
-                                /// Controls
-                                Row(
-                                  mainAxisAlignment:
-                                  MainAxisAlignment.spaceEvenly,
+                                // Controls
+                                Column(
                                   children: [
-                                    /// Loop
-                                    StreamBuilder<LoopMode>(
-                                      stream: player.loopModeStream,
-                                      builder: (_, snap) {
-                                        final mode =
-                                            snap.data ?? LoopMode.off;
-                                        return IconButton(
-                                          icon: Icon(
-                                            mode == LoopMode.one
-                                                ? CupertinoIcons.repeat_1
-                                                : CupertinoIcons.repeat,
-                                            color: mode == LoopMode.off
-                                                ? Colors.white54
-                                                : Colors.white,
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        StreamBuilder<LoopMode>(
+                                          stream: player.loopModeStream,
+                                          builder: (_, snap) {
+                                            final mode = snap.data ?? LoopMode.off;
+                                            return IconButton(
+                                              icon: Icon(
+                                                mode == LoopMode.one
+                                                    ? CupertinoIcons.repeat_1
+                                                    : CupertinoIcons.repeat,
+                                                color: mode == LoopMode.off
+                                                    ? Colors.white54
+                                                    : Colors.white,
+                                              ),
+                                              onPressed: player.toggleLoopMode,
+                                            );
+                                          },
+                                        ),
+
+                                        IconButton(
+                                          icon: Icon(theme.useGlassTheme
+                                              ? CupertinoIcons.backward_end_fill
+                                              : Icons.skip_previous),
+                                          iconSize: 30,
+                                          onPressed: player.skipPrevious,
+                                        ),
+
+                                        StreamBuilder(
+                                          stream: player.playerStateStream,
+                                          builder: (_, snap) {
+                                            final playing = snap.data?.playing ?? false;
+                                            return IconButton(
+                                              iconSize: 56,
+                                              icon: Icon(
+                                                playing
+                                                    ? CupertinoIcons.pause_circle_fill
+                                                    : CupertinoIcons.play_circle_fill,
+                                              ),
+                                              onPressed: player.togglePlayPause,
+                                            );
+                                          },
+                                        ),
+
+                                        IconButton(
+                                          icon: Icon(theme.useGlassTheme
+                                              ? CupertinoIcons.forward_end_fill
+                                              : Icons.skip_next),
+                                          iconSize: 30,
+                                          onPressed: player.skipNext,
+                                        ),
+
+                                        if (currentSong != null && !currentSong.isLocal)
+                                          IconButton(
+                                            icon: const Icon(CupertinoIcons.arrow_down),
+                                            onPressed: () => _downloadSong(currentSong),
                                           ),
-                                          onPressed: player.toggleLoopMode,
-                                        );
-                                      },
+                                      ],
                                     ),
 
-                                    /// Prev
-                                    IconButton(
-                                      icon: Icon(theme.useGlassTheme
-                                          ? CupertinoIcons.backward_end_fill
-                                          : Icons.skip_previous),
-                                      iconSize: 30,
-                                      onPressed: player.skipPrevious,
-                                    ),
+                                    const SizedBox(height: 8),
 
-                                    /// Play / Pause
-                                    StreamBuilder(
-                                      stream: player.playerStateStream,
-                                      builder: (_, snap) {
-                                        final playing =
-                                            snap.data?.playing ?? false;
-                                        return IconButton(
-                                          iconSize: 56,
+                                    // Secondary controls
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
+                                          stream: PlaylistManager.stream,
+                                          builder: (_, snap) {
+                                            final playlists = snap.data ?? {};
+                                            final favs = playlists[PlaylistManager.systemFavourites] ?? [];
+                                            final isFav = currentSong != null &&
+                                                favs.any((s) => s['id'] == currentSong.id);
+
+                                            return IconButton(
+                                              icon: Icon(
+                                                theme.useGlassTheme
+                                                    ? (isFav
+                                                    ? CupertinoIcons.heart_fill
+                                                    : CupertinoIcons.heart)
+                                                    : (isFav
+                                                    ? Icons.favorite
+                                                    : Icons.favorite_border),
+                                                color: isFav
+                                                    ? Colors.redAccent
+                                                    : Colors.white70,
+                                              ),
+                                              iconSize: 26,
+                                              onPressed: currentSong == null
+                                                  ? null
+                                                  : () async => await PlaylistManager.toggleFavourite({
+                                                'id': currentSong.id,
+                                                'title': currentSong.meta.title,
+                                                'artist': currentSong.meta.artist,
+                                                'imageUrl': currentSong.meta.imageUrl,
+                                              }),
+                                            );
+                                          },
+                                        ),
+
+                                        const SizedBox(width: 24),
+
+                                        IconButton(
                                           icon: Icon(
-                                            playing
-                                                ? CupertinoIcons
-                                                .pause_circle_fill
-                                                : CupertinoIcons
-                                                .play_circle_fill,
+                                            theme.useGlassTheme
+                                                ? CupertinoIcons.music_note_list
+                                                : Icons.playlist_add,
+                                            color: Colors.white70,
                                           ),
-                                          onPressed: player.togglePlayPause,
-                                        );
-                                      },
+                                          iconSize: 26,
+                                          onPressed: currentSong == null
+                                              ? null
+                                              : () {
+                                            _showAddToPlaylistSheet(
+                                              context,
+                                              currentSong,
+                                            );
+                                          },
+                                        ),
+                                      ],
                                     ),
-
-                                    /// Next
-                                    IconButton(
-                                      icon: Icon(theme.useGlassTheme
-                                          ? CupertinoIcons.forward_end_fill
-                                          : Icons.skip_next),
-                                      iconSize: 30,
-                                      onPressed: player.skipNext,
-                                    ),
-
-                                    /// Download
-                                    if (currentSong != null &&
-                                        !currentSong.isLocal)
-                                      IconButton(
-                                        icon: const Icon(
-                                            CupertinoIcons.arrow_down),
-                                        onPressed: () =>
-                                            _downloadSong(currentSong),
-                                      ),
                                   ],
                                 ),
                               ],
@@ -336,6 +391,119 @@ class FullPlayerSheet extends StatelessWidget {
       },
     );
   }
+}
+
+void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.black.withOpacity(0.85),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) {
+      return StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
+        stream: PlaylistManager.stream,
+        builder: (_, snap) {
+          final playlists = snap.data ?? {};
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Add to Playlist',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                if (playlists.isEmpty)
+                  const Text(
+                    'No playlists yet',
+                    style: TextStyle(color: Colors.white54),
+                  ),
+
+                ...playlists.keys
+                    .where((name) => name != PlaylistManager.systemFavourites)
+                    .map(
+                      (name) => ListTile(
+                    leading:
+                    const Icon(CupertinoIcons.music_note_list),
+                    title: Text(name),
+                    onTap: () async {
+                      await PlaylistManager.addSong(
+                        name,
+                        {
+                          'id': song.id,
+                          'title': song.meta.title,
+                          'artist': song.meta.artist,
+                          'imageUrl': song.meta.imageUrl,
+                        },
+                      );
+                      Navigator.pop(context);
+                      AppMessenger.show(
+                        'Added to "$name"',
+                        color: Colors.green.shade700,
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                TextButton(
+                  onPressed: () async {
+                    Navigator.pop(context);
+                    _showCreatePlaylistDialog(context);
+                  },
+                  child: const Text('＋ Create new playlist'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+void _showCreatePlaylistDialog(BuildContext context) {
+  final controller = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: const Text('New Playlist'),
+      content: TextField(
+        controller: controller,
+        decoration:
+        const InputDecoration(hintText: 'Playlist name'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () async {
+            final name = controller.text.trim();
+            if (name.isEmpty) return;
+
+            await PlaylistManager.create(name);
+            Navigator.pop(context);
+            AppMessenger.show(
+              'Playlist "$name" created',
+              color: Colors.green.shade700,
+            );
+          },
+          child: const Text('Create'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _UpcomingSong {

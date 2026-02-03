@@ -2,6 +2,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
 import '../../data/api/saavn_song_api.dart';
 import '../../features/library/recently_played_cache.dart';
+import '../../features/library/playlist_manager.dart';
 
 class NowPlaying {
   final String title;
@@ -36,6 +37,7 @@ class AudioPlayerService {
     _player.playerStateStream.listen(_onPlayerStateChanged);
     _player.setLoopMode(LoopMode.off);
     _loadRecentlyPlayed();
+    PlaylistManager.load();
   }
 
   final AudioPlayer _player = AudioPlayer();
@@ -167,6 +169,29 @@ class AudioPlayerService {
     _queue = List.unmodifiable(songs);
 
     await _loadAndPlaySong(safeIndex, token);
+  }
+
+  Future<void> playPlaylist({
+    required List<Map<String, dynamic>> songs,
+    required String title,
+  }) async {
+    if (songs.isEmpty) return;
+
+    final queued = songs.map((song) {
+      return QueuedSong(
+        id: song['id'],
+        meta: NowPlaying(
+          title: song['title'],
+          artist: song['artist'],
+          imageUrl: song['imageUrl'],
+        ),
+      );
+    }).toList();
+
+    await playFromList(
+      songs: queued,
+      startIndex: 0,
+    );
   }
 
   Future<void> playNow(QueuedSong song) async {

@@ -21,7 +21,7 @@ class AboutScreen extends StatelessWidget {
                 SizedBox(height: 16),
                 Text('Dev: Dxku', style: TextStyle(fontSize: 22)),
                 SizedBox(height: 8),
-                Text('v1.0.0', style: TextStyle(fontSize: 16)),
+                Text('v1.1.0+3', style: TextStyle(fontSize: 16)),
                 SizedBox(height: 10),
                 Text('A Simple yet useful music player for streaming your favorite songs without any ads.', style: TextStyle(fontSize: 14)),
               ],

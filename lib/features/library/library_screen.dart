@@ -7,6 +7,7 @@ import '../../core/utils/glass_container.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/app_messenger.dart';
 import '../library/downloaded_songs_provider.dart';
+import '../../features/library/playlist_manager.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -99,6 +100,63 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 : Icons.more_vert),
                             onPressed: () => _deleteSong(song),
                           ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+
+            const SizedBox(height: 32),
+
+            const Text(
+              'Playlists',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 12),
+
+            StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
+              stream: PlaylistManager.stream,
+              builder: (_, snap) {
+                final playlists = snap.data ?? {};
+                if (playlists.isEmpty) return _empty('No playlists');
+
+                return Column(
+                  children: playlists.keys.map((name) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: GlassContainer(
+                        child: ListTile(
+                          leading: Icon(
+                            themeProvider.useGlassTheme
+                                ? CupertinoIcons.heart_fill
+                                : Icons.favorite,
+                          ),
+                          title: Text(name),
+                          subtitle: Text(
+                            name == PlaylistManager.systemFavourites
+                                ? 'Liked songs'
+                                : '${playlists[name]!.length} songs',
+                          ),
+                          onTap: () async {
+                            final songs = PlaylistManager.getSongs(name);
+
+                            if (songs.isEmpty) {
+                              AppMessenger.show('Playlist is empty');
+                              return;
+                            }
+
+                            await player.playPlaylist(
+                              songs: songs,
+                              title: name,
+                            );
+
+                            AppMessenger.show(
+                              'Playing "$name"',
+                              color: Colors.green.shade700,
+                            );
+                          },
                         ),
                       ),
                     );
