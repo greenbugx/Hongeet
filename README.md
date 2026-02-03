@@ -8,7 +8,6 @@
   <img src="https://skillicons.dev/icons?i=flutter,dart,kotlin,git" /><br>
   <img alt="GitHub Release" src="https://img.shields.io/github/v/release/greenbugx/Hongeet?display_name=release&style=for-the-badge&color=f01d7c" >
   <img alt="GitHub License" src="https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=1881cc" />
-  </a>
 </p>
 
 ---
@@ -39,13 +38,16 @@ It runs a **local backend inside the app**, streams directly from the source, an
 
 ### 📸 Screenshots
 
-![1.jpg](assets/screenshots/1.jpg)
-![2.jpg](assets/screenshots/2.jpg)
-![3.jpg](assets/screenshots/3.jpg)
-
-![4.jpg](assets/screenshots/4.jpg)
-![5.jpg](assets/screenshots/5.jpg)
-![6.jpg](assets/screenshots/6.jpg)
+<p align="center">
+  <img src="assets/screenshots/1.jpg" width="260" />
+  <img src="assets/screenshots/2.jpg" width="260" />
+  <img src="assets/screenshots/3.jpg" width="260" />
+</p>
+<p align="center">
+  <img src="assets/screenshots/4.jpg" width="260" />
+  <img src="assets/screenshots/5.jpg" width="260" />
+  <img src="assets/screenshots/6.jpg" width="260" />
+</p>
 
 ---
 
