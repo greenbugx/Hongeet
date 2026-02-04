@@ -12,8 +12,8 @@ class MusicApp extends StatelessWidget {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
+          navigatorKey: AppMessenger.navigatorKey,
           debugShowCheckedModeBanner: false,
-          scaffoldMessengerKey: AppMessenger.key,
           title: 'Music',
           theme: themeProvider.currentTheme,
           home: const HomeScreen(),

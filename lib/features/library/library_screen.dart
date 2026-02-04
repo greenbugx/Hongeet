@@ -8,6 +8,7 @@ import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/app_messenger.dart';
 import '../library/downloaded_songs_provider.dart';
 import '../../features/library/playlist_manager.dart';
+import 'playlist_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -39,7 +40,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         content: Text('Are you sure you want to delete ${song.name}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
         ],
       ),
     );
@@ -49,6 +53,129 @@ class _LibraryScreenState extends State<LibraryScreen> {
       AppMessenger.show('Deleted ${song.name}');
       _refreshDownloads();
     }
+  }
+
+  void _showPlaylistOptions(BuildContext context, String playlistName, ThemeProvider theme) {
+    if (playlistName == PlaylistManager.systemFavourites) {
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.9),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                playlistName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+            const Divider(height: 1, color: Colors.white12),
+
+            // Delete playlist option
+            ListTile(
+              leading: Icon(
+                theme.useGlassTheme
+                    ? CupertinoIcons.trash
+                    : Icons.delete_outline,
+                color: Colors.redAccent,
+              ),
+              title: const Text(
+                'Delete Playlist',
+                style: TextStyle(color: Colors.redAccent),
+              ),
+              onTap: () async {
+                Navigator.pop(ctx);
+
+                // Confirm deletion
+                final confirmDelete = await showDialog(
+                  context: context,
+                  builder: (ctx2) => AlertDialog(
+                    title: const Text('Delete Playlist'),
+                    content: Text('Are you sure you want to delete "$playlistName"? This cannot be undone.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx2, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx2, true),
+                        child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (confirmDelete == true) {
+                  await PlaylistManager.deletePlaylist(playlistName);
+                  AppMessenger.show('Playlist deleted');
+                }
+              },
+            ),
+
+            const Divider(height: 1, color: Colors.white12),
+
+            // Cancel
+            ListTile(
+              leading: Icon(
+                theme.useGlassTheme
+                    ? CupertinoIcons.xmark_circle
+                    : Icons.cancel_outlined,
+              ),
+              title: const Text('Cancel'),
+              onTap: () => Navigator.pop(ctx),
+            ),
+
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnimatedListItem({
+    required Widget child,
+    required int index,
+  }) {
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 200 + (index * 50)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(20 * (1 - value), 0),
+          child: Opacity(
+            opacity: value,
+            child: child,
+          ),
+        );
+      },
+      child: child,
+    );
   }
 
   @override
@@ -81,24 +208,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 if (songs.isEmpty) return _empty('No downloaded songs');
 
                 return Column(
-                  children: songs.map((song) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: GlassContainer(
-                        child: ListTile(
-                          leading: Icon(themeProvider.useGlassTheme
-                              ? CupertinoIcons.arrow_down_circle
-                              : Icons.download_done),
-                          title: Text(song.name),
-                          onTap: () {
-                            player.playLocalFile(song.path, song.name);
-                            AppMessenger.show('Playing ${song.name}');
-                          },
-                          trailing: IconButton(
-                            icon: Icon(themeProvider.useGlassTheme
-                                ? CupertinoIcons.ellipsis
-                                : Icons.more_vert),
-                            onPressed: () => _deleteSong(song),
+                  children: songs.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final song = entry.value;
+
+                    return _buildAnimatedListItem(
+                      index: index,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GlassContainer(
+                          child: ListTile(
+                            leading: Icon(themeProvider.useGlassTheme
+                                ? CupertinoIcons.arrow_down_circle
+                                : Icons.download_done),
+                            title: Text(song.name),
+                            onTap: () {
+                              player.playLocalFile(song.path, song.name);
+                              AppMessenger.show('Playing ${song.name}');
+                            },
+                            trailing: IconButton(
+                              icon: Icon(themeProvider.useGlassTheme
+                                  ? CupertinoIcons.ellipsis
+                                  : Icons.more_vert),
+                              onPressed: () => _deleteSong(song),
+                            ),
                           ),
                         ),
                       ),
@@ -123,40 +256,65 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 if (playlists.isEmpty) return _empty('No playlists');
 
                 return Column(
-                  children: playlists.keys.map((name) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: GlassContainer(
-                        child: ListTile(
-                          leading: Icon(
-                            themeProvider.useGlassTheme
-                                ? CupertinoIcons.heart_fill
-                                : Icons.favorite,
+                  children: playlists.keys.toList().asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final name = entry.value;
+
+                    return _buildAnimatedListItem(
+                      index: index,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GlassContainer(
+                          child: ListTile(
+                            leading: Icon(
+                              themeProvider.useGlassTheme
+                                  ? CupertinoIcons.heart_fill
+                                  : Icons.favorite,
+                            ),
+                            title: Text(name),
+                            subtitle: Text(
+                              name == PlaylistManager.systemFavourites
+                                  ? 'Liked songs'
+                                  : '${playlists[name]!.length} songs',
+                            ),
+                            trailing: name == PlaylistManager.systemFavourites
+                                ? null
+                                : IconButton(
+                              icon: Icon(
+                                themeProvider.useGlassTheme
+                                    ? CupertinoIcons.ellipsis
+                                    : Icons.more_vert,
+                              ),
+                              onPressed: () => _showPlaylistOptions(context, name, themeProvider),
+                            ),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                PageRouteBuilder(
+                                  opaque: false,
+                                  transitionDuration: const Duration(milliseconds: 300),
+                                  reverseTransitionDuration: const Duration(milliseconds: 300),
+                                  pageBuilder: (context, animation, secondaryAnimation) =>
+                                      PlaylistScreen(
+                                        name: name,
+                                      ),
+                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                                    const begin = Offset(1.0, 0.0);
+                                    const end = Offset.zero;
+                                    const curve = Curves.easeInOutCubic;
+
+                                    var tween = Tween(begin: begin, end: end).chain(
+                                      CurveTween(curve: curve),
+                                    );
+
+                                    return SlideTransition(
+                                      position: animation.drive(tween),
+                                      child: child,
+                                    );
+                                  },
+                                ),
+                              );
+                            },
                           ),
-                          title: Text(name),
-                          subtitle: Text(
-                            name == PlaylistManager.systemFavourites
-                                ? 'Liked songs'
-                                : '${playlists[name]!.length} songs',
-                          ),
-                          onTap: () async {
-                            final songs = PlaylistManager.getSongs(name);
-
-                            if (songs.isEmpty) {
-                              AppMessenger.show('Playlist is empty');
-                              return;
-                            }
-
-                            await player.playPlaylist(
-                              songs: songs,
-                              title: name,
-                            );
-
-                            AppMessenger.show(
-                              'Playing "$name"',
-                              color: Colors.green.shade700,
-                            );
-                          },
                         ),
                       ),
                     );
@@ -179,17 +337,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 if (items.isEmpty) return _empty('Nothing played yet');
 
                 return Column(
-                  children: items.map((song) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: GlassContainer(
-                        child: ListTile(
-                          leading: Icon(themeProvider.useGlassTheme
-                              ? CupertinoIcons.time
-                              : Icons.history),
-                          title: Text(song['title']),
-                          subtitle: Text(song['artist']),
-                          onTap: () => player.playFromCache(song),
+                  children: items.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final song = entry.value;
+
+                    return _buildAnimatedListItem(
+                      index: index,
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GlassContainer(
+                          child: ListTile(
+                            leading: Icon(themeProvider.useGlassTheme
+                                ? CupertinoIcons.time
+                                : Icons.history),
+                            title: Text(song['title']),
+                            subtitle: Text(song['artist']),
+                            onTap: () => player.playFromCache(song),
+                          ),
                         ),
                       ),
                     );

@@ -7,7 +7,7 @@ class PlaylistManager {
   static const String systemFavourites = 'Favourite Songs';
 
   static final BehaviorSubject<Map<String, List<Map<String, dynamic>>>>
-      _subject = BehaviorSubject.seeded({});
+  _subject = BehaviorSubject.seeded({});
 
   static Stream<Map<String, List<Map<String, dynamic>>>> get stream =>
       _subject.stream;
@@ -21,7 +21,7 @@ class PlaylistManager {
     if (raw != null) {
       map = Map<String, List<Map<String, dynamic>>>.from(
         jsonDecode(raw).map(
-          (k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v)),
+              (k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v)),
         ),
       );
     }
@@ -57,19 +57,46 @@ class PlaylistManager {
     map[name] = [];
     await _save(map);
   }
-
-  static Future<void> addSong(
-    String playlist,
-    Map<String, dynamic> song,
-  ) async {
+  
+  static Future<bool> addSong(
+      String playlist,
+      Map<String, dynamic> song,
+      ) async {
     final map = Map<String, List<Map<String, dynamic>>>.from(_subject.value);
 
     final list = map[playlist] ?? [];
 
-    list.removeWhere((e) => e['id'] == song['id']);
+    // Check if song already exists
+    final exists = list.any((e) => e['id'] == song['id']);
+    if (exists) {
+      return false;
+    }
+
     list.add(song);
+    map[playlist] = list;
+    await _save(map);
+
+    return true;
+  }
+
+  static Future<void> removeSong(
+      String playlist,
+      String songId,
+      ) async {
+    final map = Map<String, List<Map<String, dynamic>>>.from(_subject.value);
+
+    final list = map[playlist] ?? [];
+    list.removeWhere((e) => e['id'] == songId);
 
     map[playlist] = list;
+    await _save(map);
+  }
+
+  static Future<void> deletePlaylist(String name) async {
+    if (name == systemFavourites) return; // Can't delete favorites
+
+    final map = Map<String, List<Map<String, dynamic>>>.from(_subject.value);
+    map.remove(name);
     await _save(map);
   }
 

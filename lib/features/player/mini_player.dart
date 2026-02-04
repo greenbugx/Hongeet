@@ -19,111 +19,169 @@ class MiniPlayer extends StatelessWidget {
       stream: player.nowPlayingStream,
       builder: (context, snapshot) {
         final now = snapshot.data;
-        if (now == null) return const SizedBox.shrink();
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => const FullPlayerSheet(),
-              );
-            },
-            child: GlassContainer(
-              borderRadius: BorderRadius.circular(24),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        now.imageUrl,
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                        const Icon(Icons.music_note),
-                      ),
-                    ),
-
-                    const SizedBox(width: 12),
-
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _AutoMarqueeText(
-                            text: now.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          _AutoMarqueeText(
-                            text: now.artist,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white70,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(width: 8),
-
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(themeProvider.useGlassTheme
-                              ? CupertinoIcons.backward_end_fill
-                              : Icons.skip_previous),
-                          onPressed: player.skipPrevious,
-                        ),
-                        StreamBuilder(
-                          stream: player.playerStateStream,
-                          builder: (_, snap) {
-                            final playing = snap.data?.playing ?? false;
-                            return IconButton(
-                              iconSize: 34,
-                              icon: Icon(
-                                playing
-                                    ? themeProvider.useGlassTheme
-                                    ? CupertinoIcons.pause_circle_fill
-                                    : Icons.pause_circle_filled
-                                    : themeProvider.useGlassTheme
-                                    ? CupertinoIcons.play_circle_fill
-                                    : Icons.play_circle_filled,
-                              ),
-                              onPressed: player.togglePlayPause,
-                            );
-                          },
-                        ),
-                        IconButton(
-                          icon: Icon(themeProvider.useGlassTheme
-                              ? CupertinoIcons.forward_end_fill
-                              : Icons.skip_next),
-                          onPressed: player.skipNext,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(animation),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
               ),
-            ),
+            );
+          },
+          child: now == null
+              ? const SizedBox.shrink(key: ValueKey('empty'))
+              : _MiniPlayerContent(
+            key: ValueKey('player-${now.title}'),
+            now: now,
+            player: player,
+            themeProvider: themeProvider,
           ),
         );
       },
+    );
+  }
+}
+
+class _MiniPlayerContent extends StatelessWidget {
+  final NowPlaying now;
+  final AudioPlayerService player;
+  final ThemeProvider themeProvider;
+
+  const _MiniPlayerContent({
+    super.key,
+    required this.now,
+    required this.player,
+    required this.themeProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => const FullPlayerSheet(),
+          );
+        },
+        child: GlassContainer(
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 300),
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  builder: (context, value, child) {
+                    return Opacity(
+                      opacity: value,
+                      child: Transform.scale(
+                        scale: 0.8 + (0.2 * value),
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      now.imageUrl,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) =>
+                      const Icon(Icons.music_note),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _AutoMarqueeText(
+                        text: now.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      _AutoMarqueeText(
+                        text: now.artist,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(themeProvider.useGlassTheme
+                          ? CupertinoIcons.backward_end_fill
+                          : Icons.skip_previous),
+                      onPressed: player.skipPrevious,
+                    ),
+                    StreamBuilder(
+                      stream: player.playerStateStream,
+                      builder: (_, snap) {
+                        final playing = snap.data?.playing ?? false;
+                        return AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          child: IconButton(
+                            key: ValueKey(playing),
+                            iconSize: 34,
+                            icon: Icon(
+                              playing
+                                  ? themeProvider.useGlassTheme
+                                  ? CupertinoIcons.pause_circle_fill
+                                  : Icons.pause_circle_filled
+                                  : themeProvider.useGlassTheme
+                                  ? CupertinoIcons.play_circle_fill
+                                  : Icons.play_circle_filled,
+                            ),
+                            onPressed: player.togglePlayPause,
+                          ),
+                        );
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(themeProvider.useGlassTheme
+                          ? CupertinoIcons.forward_end_fill
+                          : Icons.skip_next),
+                      onPressed: player.skipNext,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

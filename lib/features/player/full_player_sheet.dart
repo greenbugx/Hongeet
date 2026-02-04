@@ -157,8 +157,7 @@ class FullPlayerSheet extends StatelessWidget {
                                     return StreamBuilder<Duration?>(
                                       stream: player.durationStream,
                                       builder: (_, durSnap) {
-                                        final dur =
-                                            durSnap.data ?? Duration.zero;
+                                        final dur = durSnap.data ?? Duration.zero;
                                         final max = dur.inSeconds > 0
                                             ? dur.inSeconds.toDouble()
                                             : 1.0;
@@ -175,24 +174,20 @@ class FullPlayerSheet extends StatelessWidget {
                                               ),
                                             ),
                                             Padding(
-                                              padding:
-                                              const EdgeInsets.symmetric(
+                                              padding: const EdgeInsets.symmetric(
                                                   horizontal: 6),
                                               child: Row(
                                                 mainAxisAlignment:
-                                                MainAxisAlignment
-                                                    .spaceBetween,
+                                                MainAxisAlignment.spaceBetween,
                                                 children: [
                                                   Text(_fmt(pos),
                                                       style: const TextStyle(
                                                           fontSize: 12,
-                                                          color:
-                                                          Colors.white70)),
+                                                          color: Colors.white70)),
                                                   Text(_fmt(dur),
                                                       style: const TextStyle(
                                                           fontSize: 12,
-                                                          color:
-                                                          Colors.white70)),
+                                                          color: Colors.white70)),
                                                 ],
                                               ),
                                             ),
@@ -209,7 +204,8 @@ class FullPlayerSheet extends StatelessWidget {
                                 Column(
                                   children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                      mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
                                       children: [
                                         StreamBuilder<LoopMode>(
                                           stream: player.loopModeStream,
@@ -218,8 +214,12 @@ class FullPlayerSheet extends StatelessWidget {
                                             return IconButton(
                                               icon: Icon(
                                                 mode == LoopMode.one
+                                                    ? (theme.useGlassTheme
                                                     ? CupertinoIcons.repeat_1
-                                                    : CupertinoIcons.repeat,
+                                                    : Icons.repeat_one)
+                                                    : (theme.useGlassTheme
+                                                    ? CupertinoIcons.repeat
+                                                    : Icons.repeat),
                                                 color: mode == LoopMode.off
                                                     ? Colors.white54
                                                     : Colors.white,
@@ -228,7 +228,6 @@ class FullPlayerSheet extends StatelessWidget {
                                             );
                                           },
                                         ),
-
                                         IconButton(
                                           icon: Icon(theme.useGlassTheme
                                               ? CupertinoIcons.backward_end_fill
@@ -236,23 +235,28 @@ class FullPlayerSheet extends StatelessWidget {
                                           iconSize: 30,
                                           onPressed: player.skipPrevious,
                                         ),
-
                                         StreamBuilder(
                                           stream: player.playerStateStream,
                                           builder: (_, snap) {
-                                            final playing = snap.data?.playing ?? false;
+                                            final playing =
+                                                snap.data?.playing ?? false;
                                             return IconButton(
                                               iconSize: 56,
                                               icon: Icon(
                                                 playing
-                                                    ? CupertinoIcons.pause_circle_fill
-                                                    : CupertinoIcons.play_circle_fill,
+                                                    ? (theme.useGlassTheme
+                                                    ? CupertinoIcons
+                                                    .pause_circle_fill
+                                                    : Icons.pause_circle_filled)
+                                                    : (theme.useGlassTheme
+                                                    ? CupertinoIcons
+                                                    .play_circle_fill
+                                                    : Icons.play_circle_filled),
                                               ),
                                               onPressed: player.togglePlayPause,
                                             );
                                           },
                                         ),
-
                                         IconButton(
                                           icon: Icon(theme.useGlassTheme
                                               ? CupertinoIcons.forward_end_fill
@@ -260,15 +264,17 @@ class FullPlayerSheet extends StatelessWidget {
                                           iconSize: 30,
                                           onPressed: player.skipNext,
                                         ),
-
-                                        if (currentSong != null && !currentSong.isLocal)
+                                        if (currentSong != null &&
+                                            !currentSong.isLocal)
                                           IconButton(
-                                            icon: const Icon(CupertinoIcons.arrow_down),
-                                            onPressed: () => _downloadSong(currentSong),
+                                            icon: Icon(theme.useGlassTheme
+                                                ? CupertinoIcons.arrow_down
+                                                : Icons.download),
+                                            onPressed: () =>
+                                                _downloadSong(currentSong),
                                           ),
                                       ],
                                     ),
-
                                     const SizedBox(height: 8),
 
                                     // Secondary controls
@@ -279,9 +285,13 @@ class FullPlayerSheet extends StatelessWidget {
                                           stream: PlaylistManager.stream,
                                           builder: (_, snap) {
                                             final playlists = snap.data ?? {};
-                                            final favs = playlists[PlaylistManager.systemFavourites] ?? [];
+                                            final favs = playlists[
+                                            PlaylistManager
+                                                .systemFavourites] ??
+                                                [];
                                             final isFav = currentSong != null &&
-                                                favs.any((s) => s['id'] == currentSong.id);
+                                                favs.any((s) =>
+                                                s['id'] == currentSong.id);
 
                                             return IconButton(
                                               icon: Icon(
@@ -299,18 +309,21 @@ class FullPlayerSheet extends StatelessWidget {
                                               iconSize: 26,
                                               onPressed: currentSong == null
                                                   ? null
-                                                  : () async => await PlaylistManager.toggleFavourite({
+                                                  : () async =>
+                                              await PlaylistManager
+                                                  .toggleFavourite({
                                                 'id': currentSong.id,
-                                                'title': currentSong.meta.title,
-                                                'artist': currentSong.meta.artist,
-                                                'imageUrl': currentSong.meta.imageUrl,
+                                                'title': currentSong
+                                                    .meta.title,
+                                                'artist': currentSong
+                                                    .meta.artist,
+                                                'imageUrl': currentSong
+                                                    .meta.imageUrl,
                                               }),
                                             );
                                           },
                                         ),
-
                                         const SizedBox(width: 24),
-
                                         IconButton(
                                           icon: Icon(
                                             theme.useGlassTheme
@@ -378,8 +391,8 @@ class FullPlayerSheet extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 32),
                         ],
+                        const SizedBox(height: 32),
                       ],
                     );
                   },
@@ -430,11 +443,10 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                     .where((name) => name != PlaylistManager.systemFavourites)
                     .map(
                       (name) => ListTile(
-                    leading:
-                    const Icon(CupertinoIcons.music_note_list),
+                    leading: const Icon(CupertinoIcons.music_note_list),
                     title: Text(name),
                     onTap: () async {
-                      await PlaylistManager.addSong(
+                      final success = await PlaylistManager.addSong(
                         name,
                         {
                           'id': song.id,
@@ -443,11 +455,20 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                           'imageUrl': song.meta.imageUrl,
                         },
                       );
+
                       Navigator.pop(context);
-                      AppMessenger.show(
-                        'Added to "$name"',
-                        color: Colors.green.shade700,
-                      );
+
+                      if (success) {
+                        AppMessenger.show(
+                          'Added to "$name"',
+                          color: Colors.green.shade700,
+                        );
+                      } else {
+                        AppMessenger.show(
+                          'Already in "$name"',
+                          color: Colors.orange.shade700,
+                        );
+                      }
                     },
                   ),
                 ),
@@ -479,8 +500,7 @@ void _showCreatePlaylistDialog(BuildContext context) {
       title: const Text('New Playlist'),
       content: TextField(
         controller: controller,
-        decoration:
-        const InputDecoration(hintText: 'Playlist name'),
+        decoration: const InputDecoration(hintText: 'Playlist name'),
       ),
       actions: [
         TextButton(
