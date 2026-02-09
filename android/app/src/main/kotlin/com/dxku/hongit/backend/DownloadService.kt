@@ -43,7 +43,7 @@ class DownloadService : Service() {
 
     private suspend fun startDownload(title: String, url: String) {
         try {
-            // 1. Create download directory
+            // Create download directory
             val downloadDir = File(
                 Environment.getExternalStoragePublicDirectory(
                     Environment.DIRECTORY_DOWNLOADS
@@ -55,13 +55,13 @@ class DownloadService : Service() {
                 downloadDir.mkdirs()
             }
 
-            // 2. Sanitize filename
+            // Sanitize filename
             val safeTitle = title.replace(
                 Regex("[\\\\/:*?\"<>|]"),
                 "_"
             )
 
-            // 3. Direct download from URL (these are .mp4 files with AAC audio)
+            // Direct download from URL (these are .mp4 files with AAC audio)
             updateNotification("Starting: $safeTitle", 0, false)
 
             val request = Request.Builder()
@@ -101,15 +101,22 @@ class DownloadService : Service() {
                 inputStream.close()
 
                 updateNotification("Completed: $safeTitle", 100, true)
+                showCompletedNotification("Completed: $safeTitle")
                 Log.i("DownloadService", "Download completed: ${outputFile.absolutePath}")
             }
 
         } catch (e: Exception) {
             Log.e("DownloadService", "Download failed", e)
             updateNotification("Failed: $title", 0, true)
+            showCompletedNotification("Failed: $title")
         } finally {
-            // Stop the service after download completes (success or failure)
-            delay(2000) // Show the final notification for 2 seconds
+            // final notification in the shade.
+            delay(3000)
+            try {
+                stopForeground(true)
+            } catch (_: Exception) {
+                // Ignore;
+            }
             stopSelf()
         }
     }
@@ -120,16 +127,25 @@ class DownloadService : Service() {
         progress: Int,
         done: Boolean
     ): Notification {
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Hongit Download")
             .setContentText(text)
-            // Use Android system icon instead of custom drawable
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setProgress(100, progress, false)
-            .setOngoing(!done)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
-            .build()
+
+        if (done) {
+            builder
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setOngoing(false)
+                .setProgress(0, 0, false)
+        } else {
+            builder
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setOngoing(true)
+                .setProgress(100, progress, false)
+        }
+
+        return builder.build()
     }
 
     private fun updateNotification(
@@ -138,10 +154,7 @@ class DownloadService : Service() {
         done: Boolean
     ) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.notify(
-            DOWNLOAD_NOTIFICATION_ID,
-            buildNotification(text, progress, done)
-        )
+        nm.notify(FOREGROUND_ID, buildNotification(text, progress, done))
 
     }
 
@@ -164,10 +177,25 @@ class DownloadService : Service() {
         super.onDestroy()
     }
 
+    private fun showCompletedNotification(text: String) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Hongit Download")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setShowWhen(true)
+            .build()
+
+        nm.notify(COMPLETED_NOTIFICATION_ID, notification)
+    }
+
     companion object {
         private const val CHANNEL_ID = "hongit_downloads"
         private const val FOREGROUND_ID = 1001
-        private const val DOWNLOAD_NOTIFICATION_ID = 1002
+        private const val COMPLETED_NOTIFICATION_ID = 1002
 
         fun start(context: Context, title: String, url: String) {
             val intent = Intent(context, DownloadService::class.java).apply {

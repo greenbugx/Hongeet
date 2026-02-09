@@ -41,6 +41,7 @@ class AudioPlayerService {
   }
 
   final AudioPlayer _player = AudioPlayer();
+  AudioPlayer get player => _player;
 
   List<QueuedSong> _queue = [];
   List<QueuedSong> get queue => List.unmodifiable(_queue);

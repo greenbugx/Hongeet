@@ -2,9 +2,10 @@ package com.dxku.hongit
 
 import android.os.Bundle
 import com.dxku.hongit.backend.MainService
-import io.flutter.embedding.android.FlutterActivity
+//import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity;
 
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -13,6 +14,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        MainService.stop()
+        // Android may kill background audio here, so stop the server
+       // MainService.stop()
     }
 }

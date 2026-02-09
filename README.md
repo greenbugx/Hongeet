@@ -102,10 +102,7 @@ It runs a **local backend inside the app**, streams directly from the source, an
 <h2 align="center">🚧 Upcoming Updates</h2>
 
 <div align="center">
-  ⭐ Favourites system<br>
-  📂 Playlist support<br>
   🔍 YouTube Music as alternate source<br>
-  🧹 Cache controls<br>
   🎨 More theming options
 </div>
 
