@@ -31,4 +31,22 @@ class LocalBackendApi {
       throw Exception('Download failed: ${res.body}');
     }
   }
+
+  static Future<void> downloadDirect({
+    required String title,
+    required String url,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/download/direct'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'title': title,
+        'url': url,
+      }),
+    );
+
+    if (res.statusCode != 200) {
+      throw Exception('Direct download failed: ${res.body}');
+    }
+  }
 }

@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/glass_container.dart';
 import '../../data/api/local_backend_api.dart';
+import '../../data/api/youtube_song_api.dart';
 import '../../core/utils/app_messenger.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -29,10 +30,19 @@ class FullPlayerSheet extends StatelessWidget {
         color: Colors.blueGrey.shade800,
       );
 
-      await LocalBackendApi.downloadSaavn(
-        title: song.meta.title,
-        songId: song.id,
-      );
+      if (song.id.startsWith('yt:')) {
+        final videoId = song.id.substring(3);
+        final audioUrl = await YoutubeSongApi.fetchBestStreamUrl(videoId);
+        await LocalBackendApi.downloadDirect(
+          title: song.meta.title,
+          url: audioUrl,
+        );
+      } else {
+        await LocalBackendApi.downloadSaavn(
+          title: song.meta.title,
+          songId: song.id,
+        );
+      }
 
       AppMessenger.show(
         'Download started',
@@ -63,14 +73,18 @@ class FullPlayerSheet extends StatelessWidget {
             final index = indexSnap.data ?? 0;
             final queue = player.queue;
             final currentSong =
-            index >= 0 && index < queue.length ? queue[index] : null;
+                index >= 0 && index < queue.length ? queue[index] : null;
 
             final List<_UpcomingSong> upcomingWithIndices = [];
-            for (int i = index + 1; i < queue.length; i++) {
-              upcomingWithIndices.add(_UpcomingSong(
-                song: queue[i],
-                absoluteIndex: i,
-              ));
+            for (int i = index + 1;
+                i < queue.length && upcomingWithIndices.length < 10;
+                i++) {
+              upcomingWithIndices.add(
+                _UpcomingSong(
+                  song: queue[i],
+                  absoluteIndex: i,
+                ),
+              );
             }
 
             return Stack(

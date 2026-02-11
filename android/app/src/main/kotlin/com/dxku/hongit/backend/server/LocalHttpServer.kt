@@ -168,6 +168,40 @@ class LocalHttpServer(
                     )
                 }
 
+                session.uri == "/download/direct" &&
+                        session.method == Method.POST -> {
+
+                    val body = HashMap<String, String>()
+                    session.parseBody(body)
+
+                    val json = body["postData"]
+                        ?: return newFixedLengthResponse(
+                            Response.Status.BAD_REQUEST,
+                            "application/json",
+                            """{"error":"missing_body"}"""
+                        )
+
+                    val obj = JSONObject(json)
+                    val title = obj.optString("title")
+                    val url = obj.optString("url")
+
+                    if (title.isBlank() || url.isBlank()) {
+                        return newFixedLengthResponse(
+                            Response.Status.BAD_REQUEST,
+                            "application/json",
+                            """{"error":"missing_title_or_url"}"""
+                        )
+                    }
+
+                    DownloadService.start(context, title, url)
+
+                    newFixedLengthResponse(
+                        Response.Status.OK,
+                        "application/json",
+                        """{"status":"queued"}"""
+                    )
+                }
+
                 else -> {
                     newFixedLengthResponse(
                         Response.Status.NOT_FOUND,

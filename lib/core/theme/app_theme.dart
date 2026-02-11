@@ -43,7 +43,7 @@ class AppTheme {
 class ThemeProvider with ChangeNotifier {
   static const _useGlassThemeKey = 'use_glass_theme';
 
-  bool _useGlassTheme = true;
+  bool _useGlassTheme = false;
   bool get useGlassTheme => _useGlassTheme;
 
   ThemeData get currentTheme =>
