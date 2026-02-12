@@ -30,20 +30,17 @@ class MiniPlayer extends StatelessWidget {
                 begin: const Offset(0, 1),
                 end: Offset.zero,
               ).animate(animation),
-              child: FadeTransition(
-                opacity: animation,
-                child: child,
-              ),
+              child: FadeTransition(opacity: animation, child: child),
             );
           },
           child: now == null
               ? const SizedBox.shrink(key: ValueKey('empty'))
               : _MiniPlayerContent(
-            key: ValueKey('player-${now.title}'),
-            now: now,
-            player: player,
-            themeProvider: themeProvider,
-          ),
+                  key: ValueKey('player-${now.title}'),
+                  now: now,
+                  player: player,
+                  themeProvider: themeProvider,
+                ),
         );
       },
     );
@@ -96,14 +93,20 @@ class _MiniPlayerContent extends StatelessWidget {
                     );
                   },
                   child: ClipRRect(
+                    clipBehavior: Clip.antiAlias,
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      now.imageUrl,
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.music_note),
+                    child: Transform.scale(
+                      scale: 1.9,
+                      child: Image.network(
+                        now.imageUrl,
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
+                        filterQuality: FilterQuality.medium,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.music_note),
+                      ),
                     ),
                   ),
                 ),
@@ -141,38 +144,69 @@ class _MiniPlayerContent extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: Icon(themeProvider.useGlassTheme
-                          ? CupertinoIcons.backward_end_fill
-                          : Icons.skip_previous),
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.backward_end_fill
+                            : Icons.skip_previous,
+                      ),
                       onPressed: player.skipPrevious,
                     ),
-                    StreamBuilder(
-                      stream: player.playerStateStream,
-                      builder: (_, snap) {
-                        final playing = snap.data?.playing ?? false;
-                        return AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: IconButton(
-                            key: ValueKey(playing),
-                            iconSize: 34,
-                            icon: Icon(
-                              playing
-                                  ? themeProvider.useGlassTheme
-                                  ? CupertinoIcons.pause_circle_fill
-                                  : Icons.pause_circle_filled
-                                  : themeProvider.useGlassTheme
-                                  ? CupertinoIcons.play_circle_fill
-                                  : Icons.play_circle_filled,
-                            ),
-                            onPressed: player.togglePlayPause,
-                          ),
+                    StreamBuilder<bool>(
+                      stream: player.trackLoadingStream,
+                      initialData: player.isTrackLoading,
+                      builder: (_, loadingSnap) {
+                        final isLoading = loadingSnap.data ?? false;
+                        return StreamBuilder(
+                          stream: player.playerStateStream,
+                          builder: (_, snap) {
+                            final playing = snap.data?.playing ?? false;
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: isLoading
+                                  ? SizedBox(
+                                      key: const ValueKey('loading'),
+                                      width: 42,
+                                      height: 42,
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.4,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                  Colors.white,
+                                                ),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : IconButton(
+                                      key: ValueKey(playing),
+                                      iconSize: 34,
+                                      icon: Icon(
+                                        playing
+                                            ? themeProvider.useGlassTheme
+                                                  ? CupertinoIcons
+                                                        .pause_circle_fill
+                                                  : Icons.pause_circle_filled
+                                            : themeProvider.useGlassTheme
+                                            ? CupertinoIcons.play_circle_fill
+                                            : Icons.play_circle_filled,
+                                      ),
+                                      onPressed: player.togglePlayPause,
+                                    ),
+                            );
+                          },
                         );
                       },
                     ),
                     IconButton(
-                      icon: Icon(themeProvider.useGlassTheme
-                          ? CupertinoIcons.forward_end_fill
-                          : Icons.skip_next),
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.forward_end_fill
+                            : Icons.skip_next,
+                      ),
                       onPressed: player.skipNext,
                     ),
                   ],
@@ -191,10 +225,7 @@ class _AutoMarqueeText extends StatelessWidget {
   final String text;
   final TextStyle style;
 
-  const _AutoMarqueeText({
-    required this.text,
-    required this.style,
-  });
+  const _AutoMarqueeText({required this.text, required this.style});
 
   @override
   Widget build(BuildContext context) {

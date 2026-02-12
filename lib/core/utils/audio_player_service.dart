@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
 import '../../data/api/saavn_song_api.dart';
@@ -54,6 +56,10 @@ class AudioPlayerService {
   final _currentIndexSubject = BehaviorSubject<int?>.seeded(null);
   Stream<int?> get currentIndexStream => _currentIndexSubject.stream;
   int? get currentIndex => _currentIndexSubject.value;
+
+  final _trackLoading = BehaviorSubject<bool>.seeded(false);
+  Stream<bool> get trackLoadingStream => _trackLoading.stream;
+  bool get isTrackLoading => _trackLoading.valueOrNull ?? false;
 
   final _recentlyPlayedSubject = BehaviorSubject<List<Map<String, dynamic>>>();
   Stream<List<Map<String, dynamic>>> get recentlyPlayedStream =>
@@ -152,6 +158,11 @@ class AudioPlayerService {
     }
 
     try {
+      _currentIndex = index;
+      _currentIndexSubject.add(index);
+      _nowPlaying.add(song.meta);
+      _trackLoading.add(true);
+
       await _player.stop();
       _loadedSongId = null;
 
@@ -182,7 +193,10 @@ class AudioPlayerService {
       _currentIndexSubject.add(index);
       _nowPlaying.add(song.meta);
 
-      await _player.play();
+      if (token == _playToken) {
+        _trackLoading.add(false);
+      }
+      unawaited(_player.play());
 
       await _addToRecentlyPlayed(song);
       _youtubeRetryCount.remove(song.id);
@@ -199,12 +213,12 @@ class AudioPlayerService {
         _youtubeRetryCount[song.id] = attempts;
         _urlCache.remove(song.id);
 
-        if (attempts <= 2) {
+        if (attempts <= 1) {
           print(
             'YouTube 403 detected, retrying current track with fresh extraction (attempt $attempts)',
           );
           final retryToken = ++_playToken;
-          await Future.delayed(const Duration(milliseconds: 250));
+          await Future.delayed(const Duration(milliseconds: 400));
           await _loadAndPlaySong(index, retryToken);
           return;
         }
@@ -222,6 +236,10 @@ class AudioPlayerService {
       if (_currentIndex + 1 < _queue.length) {
         await Future.delayed(const Duration(milliseconds: 500));
         await skipNext();
+      }
+    } finally {
+      if (token == _playToken) {
+        _trackLoading.add(false);
       }
     }
   }
@@ -499,6 +517,7 @@ class AudioPlayerService {
     await _nowPlaying.close();
     await _recentlyPlayedSubject.close();
     await _currentIndexSubject.close();
+    await _trackLoading.close();
   }
 }
 

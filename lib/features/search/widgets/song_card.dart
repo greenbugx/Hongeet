@@ -10,6 +10,8 @@ class SongCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imageUrl = song.imageUrl.trim();
+
     return GlassContainer(
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
@@ -22,14 +24,15 @@ class SongCard extends StatelessWidget {
             AspectRatio(
               aspectRatio: 1,
               child: ClipRRect(
+                clipBehavior: Clip.antiAlias,
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(18),
                 ),
-                child: song.imageUrl.isNotEmpty
+                child: imageUrl.isNotEmpty
                     ? Transform.scale(
-                        scale: 1.08,
+                        scale: 2.0,
                         child: Image.network(
-                          song.imageUrl,
+                          imageUrl,
                           width: double.infinity,
                           height: double.infinity,
                           fit: BoxFit.cover,

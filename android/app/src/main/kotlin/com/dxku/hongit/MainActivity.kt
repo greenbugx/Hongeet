@@ -17,7 +17,6 @@ import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import org.json.JSONObject
 
 class MainActivity : AudioServiceActivity() {
 
@@ -32,6 +31,7 @@ class MainActivity : AudioServiceActivity() {
     }
 
     private data class ExtractAttempt(
+        val label: String,
         val formatSelector: String,
         val extractorArgs: String?,
         val useAuthHeaders: Boolean
@@ -91,7 +91,9 @@ class MainActivity : AudioServiceActivity() {
                             val payload = extractBestAudio(videoId, authHeaders)
                             mainHandler.post { result.success(payload) }
                         } catch (e: Exception) {
-                            mainHandler.post { result.error("extract_failed", e.message, null) }
+                            mainHandler.post {
+                                result.error("extract_failed", toClientExtractErrorMessage(e), null)
+                            }
                         }
                     }
                 }
@@ -111,43 +113,9 @@ class MainActivity : AudioServiceActivity() {
                                 ?: throw IllegalStateException("No playable audio URL extracted")
                             mainHandler.post { result.success(url) }
                         } catch (e: Exception) {
-                            mainHandler.post { result.error("extract_failed", e.message, null) }
-                        }
-                    }
-                }
-
-                "search" -> {
-                    val query = call.argument<String>("query")?.trim().orEmpty()
-                    val take = call.argument<Int>("take") ?: 30
-                    if (query.isBlank()) {
-                        result.error("missing_query", "query is required", null)
-                        return@setMethodCallHandler
-                    }
-
-                    runBg {
-                        try {
-                            val items = searchYoutube(query, take.coerceIn(1, 50))
-                            mainHandler.post { result.success(items) }
-                        } catch (e: Exception) {
-                            mainHandler.post { result.error("search_failed", e.message, null) }
-                        }
-                    }
-                }
-
-                "related" -> {
-                    val videoId = call.argument<String>("videoId")?.trim().orEmpty()
-                    val take = call.argument<Int>("take") ?: 10
-                    if (videoId.isBlank()) {
-                        result.error("missing_video_id", "videoId is required", null)
-                        return@setMethodCallHandler
-                    }
-
-                    runBg {
-                        try {
-                            val items = relatedYoutube(videoId, take.coerceIn(1, 50))
-                            mainHandler.post { result.success(items) }
-                        } catch (e: Exception) {
-                            mainHandler.post { result.error("related_failed", e.message, null) }
+                            mainHandler.post {
+                                result.error("extract_failed", toClientExtractErrorMessage(e), null)
+                            }
                         }
                     }
                 }
@@ -184,46 +152,52 @@ class MainActivity : AudioServiceActivity() {
         videoId: String,
         authHeaders: Map<String, String>
     ): Map<String, Any?> {
+        val hasAuthHeaders = authHeaders.isNotEmpty()
         val attempts = listOf(
             ExtractAttempt(
+                label = "android-fast",
                 formatSelector = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
                 extractorArgs = "youtube:player_client=android;player_skip=webpage,configs",
                 useAuthHeaders = false
             ),
             ExtractAttempt(
+                label = "android-web-auth",
                 formatSelector = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
                 extractorArgs = "youtube:player_client=android,web",
                 useAuthHeaders = true
             ),
             ExtractAttempt(
-                formatSelector = "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
-                extractorArgs = "youtube:player_client=web",
-                useAuthHeaders = true
-            ),
-            ExtractAttempt(
+                label = "compat-auth",
                 formatSelector = "bestaudio/best",
                 extractorArgs = null,
                 useAuthHeaders = true
             )
-        )
+        ).filter { !it.useAuthHeaders || hasAuthHeaders }
 
         var lastError: Exception? = null
 
-        for (attempt in attempts) {
+        for ((index, attempt) in attempts.withIndex()) {
             try {
-                return extractBestAudioWithAttempt(videoId, authHeaders, attempt)
+                val payload = extractBestAudioWithAttempt(videoId, authHeaders, attempt)
+                if (index > 0) {
+                    Log.i(TAG, "Extraction succeeded via fallback path: ${attempt.label}")
+                }
+                return payload
             } catch (e: Exception) {
                 lastError = e
-                Log.w(
-                    TAG,
-                    "Extraction attempt failed " +
-                        "(format=${attempt.formatSelector}, extractorArgs=${attempt.extractorArgs}, " +
-                        "useAuth=${attempt.useAuthHeaders}): ${e.message}"
-                )
+                val hasNext = index < attempts.lastIndex
+                val retryable = isRetryableExtractError(e)
+                if (!hasNext || !retryable) {
+                    break
+                }
+                Log.d(TAG, "Extraction fallback after '${attempt.label}': ${e.message}")
+                Thread.sleep(((index + 1) * 120L).coerceAtMost(300L))
             }
         }
 
-        throw lastError ?: IllegalStateException("No playable audio URL extracted")
+        throw IllegalStateException(
+            toClientExtractErrorMessage(lastError ?: IllegalStateException("No playable audio URL extracted"))
+        )
     }
 
     private fun extractBestAudioWithAttempt(
@@ -237,9 +211,9 @@ class MainActivity : AudioServiceActivity() {
         request.addOption("--no-playlist")
         request.addOption("--no-warnings")
         request.addOption("--geo-bypass")
-        request.addOption("--socket-timeout", "8")
-        request.addOption("--retries", "1")
-        request.addOption("--extractor-retries", "1")
+        request.addOption("--socket-timeout", "7")
+        request.addOption("--retries", "0")
+        request.addOption("--extractor-retries", "0")
         request.addOption("-f", attempt.formatSelector)
 
         if (!attempt.extractorArgs.isNullOrBlank()) {
@@ -288,6 +262,47 @@ class MainActivity : AudioServiceActivity() {
         )
     }
 
+    private fun isRetryableExtractError(e: Exception): Boolean {
+        val msg = e.message?.lowercase().orEmpty()
+        if (msg.isBlank()) return true
+
+        val nonRetryableTokens = listOf(
+            "private video",
+            "members-only",
+            "age-restricted",
+            "confirm your age",
+            "video unavailable",
+            "this video is unavailable",
+            "unavailable in your country",
+            "geo restricted",
+            "geo-restricted",
+            "sign in to confirm your age"
+        )
+        return nonRetryableTokens.none { msg.contains(it) }
+    }
+
+    private fun toClientExtractErrorMessage(e: Exception): String {
+        val msg = e.message?.trim().orEmpty()
+        val lower = msg.lowercase()
+
+        return when {
+            lower.contains("age-restricted") || lower.contains("confirm your age") ->
+                "Age-restricted content. Sign-in headers are required."
+            lower.contains("private video") || lower.contains("members-only") ->
+                "Private or members-only content cannot be streamed."
+            lower.contains("unavailable in your country") ||
+                lower.contains("geo restricted") ||
+                lower.contains("geo-restricted") ->
+                "Geo-restricted content is unavailable in this region."
+            lower.contains("video unavailable") || lower.contains("this video is unavailable") ->
+                "Video is unavailable."
+            lower.contains("forbidden") || lower.contains("http error 403") ->
+                "Access denied by source (403). Try refreshing auth headers."
+            msg.isNotEmpty() -> msg
+            else -> "No playable audio URL extracted."
+        }
+    }
+
     private fun applyAuthHeaders(
         request: YoutubeDLRequest,
         rawHeaders: Map<String, String>
@@ -334,296 +349,6 @@ class MainActivity : AudioServiceActivity() {
         lower["origin"]?.let { normalized["Origin"] = it }
 
         return normalized
-    }
-
-    private fun searchYoutube(query: String, take: Int): List<Map<String, Any?>> {
-        val safeTake = take.coerceIn(1, 50)
-        val fetchTake = (safeTake * 2).coerceIn(safeTake, 50)
-        val artistQuery = isLikelyArtistQuery(query)
-        val effectiveQuery = buildMusicSearchQuery(query)
-
-        val request = YoutubeDLRequest("ytsearch${fetchTake}:${effectiveQuery}")
-        request.addOption("--dump-single-json")
-        request.addOption("--no-playlist")
-        request.addOption("--no-warnings")
-        request.addOption("--geo-bypass")
-        request.addOption("--flat-playlist")
-        request.addOption("--playlist-end", fetchTake.toString())
-        request.addOption("--socket-timeout", "8")
-        request.addOption("--retries", "1")
-        request.addOption("--extractor-retries", "1")
-        request.addOption("--extractor-args", "youtube:player_skip=webpage,configs")
-
-        val resp = YoutubeDL.getInstance().execute(request)
-        val json = JSONObject(resp.out)
-        val entries = json.optJSONArray("entries") ?: return emptyList()
-
-        val strict = ArrayList<Map<String, Any?>>()
-        val relaxed = ArrayList<Map<String, Any?>>()
-
-        for (i in 0 until entries.length()) {
-            val e = entries.optJSONObject(i) ?: continue
-            if (artistQuery) {
-                val mapped = mapYtEntryToSong(e, query, strictMode = false) ?: continue
-                val uploader = e.optString("uploader").ifBlank { e.optString("channel").trim() }.trim()
-                if (isArtistChannelMatch(uploader, query)) {
-                    strict.add(mapped)
-                } else {
-                    relaxed.add(mapped)
-                }
-                continue
-            }
-
-            val strictMapped = mapYtEntryToSong(e, query, strictMode = true)
-            if (strictMapped != null) {
-                strict.add(strictMapped)
-                continue
-            }
-
-            val relaxedMapped = mapYtEntryToSong(e, query, strictMode = false)
-            if (relaxedMapped != null) {
-                relaxed.add(relaxedMapped)
-            }
-        }
-
-        val out = ArrayList<Map<String, Any?>>()
-        val seenIds = HashSet<String>()
-
-        for (item in strict) {
-            val id = item["id"] as? String ?: continue
-            if (seenIds.add(id)) out.add(item)
-            if (out.size >= safeTake) return out
-        }
-
-        for (item in relaxed) {
-            val id = item["id"] as? String ?: continue
-            if (seenIds.add(id)) out.add(item)
-            if (out.size >= safeTake) break
-        }
-
-        return out
-    }
-
-    private fun relatedYoutube(videoId: String, take: Int): List<Map<String, Any?>> {
-        val mixUrl = "https://www.youtube.com/watch?v=$videoId&list=RD$videoId"
-        val request = YoutubeDLRequest(mixUrl)
-        request.addOption("--dump-single-json")
-        request.addOption("--no-warnings")
-        request.addOption("--geo-bypass")
-        request.addOption("--flat-playlist")
-        request.addOption("--playlist-end", (take + 2).toString())
-        request.addOption("--socket-timeout", "8")
-        request.addOption("--retries", "1")
-        request.addOption("--extractor-retries", "1")
-        request.addOption("--extractor-args", "youtube:player_skip=webpage,configs")
-
-        val resp = YoutubeDL.getInstance().execute(request)
-        val json = JSONObject(resp.out)
-        val entries = json.optJSONArray("entries") ?: return emptyList()
-
-        val out = ArrayList<Map<String, Any?>>()
-        for (i in 0 until entries.length()) {
-            val e = entries.optJSONObject(i) ?: continue
-            val mapped = mapYtEntryToSong(e, query = "", strictMode = false) ?: continue
-            out.add(mapped)
-            if (out.size >= take) break
-        }
-        return out
-    }
-
-    private fun mapYtEntryToSong(
-        e: JSONObject,
-        query: String,
-        strictMode: Boolean
-    ): Map<String, Any?>? {
-        val id = e.optString("id").trim()
-        val title = e.optString("title").trim()
-        val uploader = e.optString("uploader").ifBlank { e.optString("channel").trim() }.trim()
-        val duration = if (e.has("duration")) e.optInt("duration", -1) else -1
-
-        if (id.isBlank() || title.isBlank()) return null
-
-        if (duration > 0) {
-            if (duration in 0..59) return null
-            if (duration > 15 * 60) return null
-        }
-
-        if (!isLikelyMusicResult(title, uploader, duration, query, strictMode)) {
-            return null
-        }
-
-        val thumbUrl = "https://i.ytimg.com/vi/$id/hqdefault.jpg"
-
-        return mapOf(
-            "id" to "yt:$id",
-            "name" to title,
-            "duration" to if (duration > 0) duration else null,
-            "author" to uploader,
-            "thumbnail" to thumbUrl
-        )
-    }
-
-    private fun buildMusicSearchQuery(query: String): String {
-        val q = query.trim()
-        if (q.isBlank()) return q
-
-        if (isLikelyArtistQuery(q)) {
-            return "$q topic"
-        }
-
-        val lower = q.lowercase()
-        val hasMusicHint = listOf(
-            "song",
-            "music",
-            "lyrics",
-            "lyric",
-            "audio",
-            "album",
-            "track",
-            "remix",
-            "cover",
-            "ost",
-            "soundtrack",
-            "instrumental"
-        ).any { lower.contains(it) }
-
-        return if (hasMusicHint) q else "$q song"
-    }
-
-    private fun isLikelyArtistQuery(query: String): Boolean {
-        val q = query.trim()
-        if (q.isBlank()) return false
-
-        val lower = q.lowercase()
-        val musicHint = listOf(
-            "song",
-            "songs",
-            "music",
-            "lyrics",
-            "lyric",
-            "audio",
-            "album",
-            "track",
-            "playlist",
-            "mix",
-            "remix",
-            "cover",
-            "ost",
-            "soundtrack"
-        ).any { lower.contains(it) }
-        if (musicHint) return false
-
-        val words = q.split(Regex("\\s+")).filter { it.isNotBlank() }
-        if (words.size !in 2..4) return false
-
-        if (q.any { it.isDigit() }) return false
-        if (!q.matches(Regex("[A-Za-z'&.\\- ]+"))) return false
-
-        return true
-    }
-
-    private fun isArtistChannelMatch(uploader: String, query: String): Boolean {
-        val u = uploader.lowercase()
-        val tokens = query.lowercase()
-            .split(Regex("\\s+"))
-            .map { it.trim() }
-            .filter { it.length >= 3 }
-
-        if (tokens.isEmpty()) return false
-
-        val matches = tokens.count { token -> u.contains(token) }
-        if (matches >= 2) return true
-        if (matches >= 1 && (u.contains("- topic") || u.contains("vevo") || u.contains("official"))) {
-            return true
-        }
-
-        return false
-    }
-
-    private fun isLikelyMusicResult(
-        title: String,
-        uploader: String,
-        duration: Int,
-        query: String,
-        strictMode: Boolean
-    ): Boolean {
-        val t = title.lowercase()
-        val u = uploader.lowercase()
-        val q = query.lowercase()
-
-        val blockedTokens = listOf(
-            "full movie",
-            "episode",
-            "podcast",
-            "reaction",
-            "review",
-            "interview",
-            "news",
-            "trailer",
-            "teaser",
-            "shorts",
-            "gameplay",
-            "walkthrough",
-            "tutorial",
-            "how to",
-            "lecture",
-            "speech",
-            "sermon",
-            "comedy",
-            "prank",
-            "vlog"
-        )
-        if (blockedTokens.any { t.contains(it) }) return false
-
-        val likelyNonMusicChannels = listOf(
-            "news",
-            "podcast",
-            "tv",
-            "interview"
-        )
-        if (strictMode && likelyNonMusicChannels.any { u.contains(it) }) return false
-
-        if (duration > 0) {
-            if (duration in 0..59) return false
-            if (duration > 15 * 60) return false
-            if (strictMode && duration > 10 * 60 && !q.contains("live") && !q.contains("mix")) {
-                return false
-            }
-        } else if (strictMode) {
-            return false
-        }
-
-        val queryTokens = q
-            .split(Regex("\\s+"))
-            .map { it.trim() }
-            .filter { it.length >= 3 }
-            .filter { it !in setOf("the", "and", "for", "song", "music", "video", "audio") }
-        if (strictMode && queryTokens.isNotEmpty()) {
-            val matches = queryTokens.count { token -> t.contains(token) || u.contains(token) }
-            if (matches == 0) return false
-        }
-
-        val musicSignals = listOf(
-            "official audio",
-            "audio",
-            "lyrics",
-            "lyric",
-            "music video",
-            "visualizer",
-            "remix",
-            "cover",
-            "ost",
-            "soundtrack"
-        )
-        val hasMusicSignal = musicSignals.any { t.contains(it) } ||
-            u.contains("- topic") ||
-            u.contains("vevo")
-
-        if (strictMode && !hasMusicSignal && duration > 0 && duration !in 90..480) {
-            return false
-        }
-
-        return true
     }
 
     private fun Map<String, Any?>?.toStringMap(): Map<String, String> {

@@ -44,15 +44,9 @@ class FullPlayerSheet extends StatelessWidget {
         );
       }
 
-      AppMessenger.show(
-        'Download started',
-        color: Colors.green.shade700,
-      );
+      AppMessenger.show('Download started', color: Colors.green.shade700);
     } catch (_) {
-      AppMessenger.show(
-        'Download failed',
-        color: Colors.red.shade700,
-      );
+      AppMessenger.show('Download failed', color: Colors.red.shade700);
     }
   }
 
@@ -72,18 +66,18 @@ class FullPlayerSheet extends StatelessWidget {
           builder: (_, indexSnap) {
             final index = indexSnap.data ?? 0;
             final queue = player.queue;
-            final currentSong =
-                index >= 0 && index < queue.length ? queue[index] : null;
+            final currentSong = index >= 0 && index < queue.length
+                ? queue[index]
+                : null;
 
             final List<_UpcomingSong> upcomingWithIndices = [];
-            for (int i = index + 1;
-                i < queue.length && upcomingWithIndices.length < 10;
-                i++) {
+            for (
+              int i = index + 1;
+              i < queue.length && upcomingWithIndices.length < 10;
+              i++
+            ) {
               upcomingWithIndices.add(
-                _UpcomingSong(
-                  song: queue[i],
-                  absoluteIndex: i,
-                ),
+                _UpcomingSong(song: queue[i], absoluteIndex: i),
               );
             }
 
@@ -125,10 +119,16 @@ class FullPlayerSheet extends StatelessWidget {
                                 AspectRatio(
                                   aspectRatio: 1,
                                   child: ClipRRect(
+                                    clipBehavior: Clip.antiAlias,
                                     borderRadius: BorderRadius.circular(22),
-                                    child: Image.network(
-                                      now.imageUrl,
-                                      fit: BoxFit.cover,
+                                    child: Transform.scale(
+                                      scale: 1.9,
+                                      child: Image.network(
+                                        now.imageUrl,
+                                        fit: BoxFit.cover,
+                                        alignment: Alignment.center,
+                                        filterQuality: FilterQuality.medium,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -171,7 +171,8 @@ class FullPlayerSheet extends StatelessWidget {
                                     return StreamBuilder<Duration?>(
                                       stream: player.durationStream,
                                       builder: (_, durSnap) {
-                                        final dur = durSnap.data ?? Duration.zero;
+                                        final dur =
+                                            durSnap.data ?? Duration.zero;
                                         final max = dur.inSeconds > 0
                                             ? dur.inSeconds.toDouble()
                                             : 1.0;
@@ -188,20 +189,29 @@ class FullPlayerSheet extends StatelessWidget {
                                               ),
                                             ),
                                             Padding(
-                                              padding: const EdgeInsets.symmetric(
-                                                  horizontal: 6),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                  ),
                                               child: Row(
                                                 mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
                                                 children: [
-                                                  Text(_fmt(pos),
-                                                      style: const TextStyle(
-                                                          fontSize: 12,
-                                                          color: Colors.white70)),
-                                                  Text(_fmt(dur),
-                                                      style: const TextStyle(
-                                                          fontSize: 12,
-                                                          color: Colors.white70)),
+                                                  Text(
+                                                    _fmt(pos),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.white70,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    _fmt(dur),
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.white70,
+                                                    ),
+                                                  ),
                                                 ],
                                               ),
                                             ),
@@ -219,21 +229,24 @@ class FullPlayerSheet extends StatelessWidget {
                                   children: [
                                     Row(
                                       mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
+                                          MainAxisAlignment.spaceEvenly,
                                       children: [
                                         StreamBuilder<LoopMode>(
                                           stream: player.loopModeStream,
                                           builder: (_, snap) {
-                                            final mode = snap.data ?? LoopMode.off;
+                                            final mode =
+                                                snap.data ?? LoopMode.off;
                                             return IconButton(
                                               icon: Icon(
                                                 mode == LoopMode.one
                                                     ? (theme.useGlassTheme
-                                                    ? CupertinoIcons.repeat_1
-                                                    : Icons.repeat_one)
+                                                          ? CupertinoIcons
+                                                                .repeat_1
+                                                          : Icons.repeat_one)
                                                     : (theme.useGlassTheme
-                                                    ? CupertinoIcons.repeat
-                                                    : Icons.repeat),
+                                                          ? CupertinoIcons
+                                                                .repeat
+                                                          : Icons.repeat),
                                                 color: mode == LoopMode.off
                                                     ? Colors.white54
                                                     : Colors.white,
@@ -243,9 +256,12 @@ class FullPlayerSheet extends StatelessWidget {
                                           },
                                         ),
                                         IconButton(
-                                          icon: Icon(theme.useGlassTheme
-                                              ? CupertinoIcons.backward_end_fill
-                                              : Icons.skip_previous),
+                                          icon: Icon(
+                                            theme.useGlassTheme
+                                                ? CupertinoIcons
+                                                      .backward_end_fill
+                                                : Icons.skip_previous,
+                                          ),
                                           iconSize: 30,
                                           onPressed: player.skipPrevious,
                                         ),
@@ -259,31 +275,38 @@ class FullPlayerSheet extends StatelessWidget {
                                               icon: Icon(
                                                 playing
                                                     ? (theme.useGlassTheme
-                                                    ? CupertinoIcons
-                                                    .pause_circle_fill
-                                                    : Icons.pause_circle_filled)
+                                                          ? CupertinoIcons
+                                                                .pause_circle_fill
+                                                          : Icons
+                                                                .pause_circle_filled)
                                                     : (theme.useGlassTheme
-                                                    ? CupertinoIcons
-                                                    .play_circle_fill
-                                                    : Icons.play_circle_filled),
+                                                          ? CupertinoIcons
+                                                                .play_circle_fill
+                                                          : Icons
+                                                                .play_circle_filled),
                                               ),
                                               onPressed: player.togglePlayPause,
                                             );
                                           },
                                         ),
                                         IconButton(
-                                          icon: Icon(theme.useGlassTheme
-                                              ? CupertinoIcons.forward_end_fill
-                                              : Icons.skip_next),
+                                          icon: Icon(
+                                            theme.useGlassTheme
+                                                ? CupertinoIcons
+                                                      .forward_end_fill
+                                                : Icons.skip_next,
+                                          ),
                                           iconSize: 30,
                                           onPressed: player.skipNext,
                                         ),
                                         if (currentSong != null &&
                                             !currentSong.isLocal)
                                           IconButton(
-                                            icon: Icon(theme.useGlassTheme
-                                                ? CupertinoIcons.arrow_down
-                                                : Icons.download),
+                                            icon: Icon(
+                                              theme.useGlassTheme
+                                                  ? CupertinoIcons.arrow_down
+                                                  : Icons.download,
+                                            ),
                                             onPressed: () =>
                                                 _downloadSong(currentSong),
                                           ),
@@ -293,29 +316,41 @@ class FullPlayerSheet extends StatelessWidget {
 
                                     // Secondary controls
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
-                                        StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
+                                        StreamBuilder<
+                                          Map<
+                                            String,
+                                            List<Map<String, dynamic>>
+                                          >
+                                        >(
                                           stream: PlaylistManager.stream,
                                           builder: (_, snap) {
                                             final playlists = snap.data ?? {};
-                                            final favs = playlists[
-                                            PlaylistManager
-                                                .systemFavourites] ??
+                                            final favs =
+                                                playlists[PlaylistManager
+                                                    .systemFavourites] ??
                                                 [];
-                                            final isFav = currentSong != null &&
-                                                favs.any((s) =>
-                                                s['id'] == currentSong.id);
+                                            final isFav =
+                                                currentSong != null &&
+                                                favs.any(
+                                                  (s) =>
+                                                      s['id'] == currentSong.id,
+                                                );
 
                                             return IconButton(
                                               icon: Icon(
                                                 theme.useGlassTheme
                                                     ? (isFav
-                                                    ? CupertinoIcons.heart_fill
-                                                    : CupertinoIcons.heart)
+                                                          ? CupertinoIcons
+                                                                .heart_fill
+                                                          : CupertinoIcons
+                                                                .heart)
                                                     : (isFav
-                                                    ? Icons.favorite
-                                                    : Icons.favorite_border),
+                                                          ? Icons.favorite
+                                                          : Icons
+                                                                .favorite_border),
                                                 color: isFav
                                                     ? Colors.redAccent
                                                     : Colors.white70,
@@ -324,16 +359,23 @@ class FullPlayerSheet extends StatelessWidget {
                                               onPressed: currentSong == null
                                                   ? null
                                                   : () async =>
-                                              await PlaylistManager
-                                                  .toggleFavourite({
-                                                'id': currentSong.id,
-                                                'title': currentSong
-                                                    .meta.title,
-                                                'artist': currentSong
-                                                    .meta.artist,
-                                                'imageUrl': currentSong
-                                                    .meta.imageUrl,
-                                              }),
+                                                        await PlaylistManager.toggleFavourite(
+                                                          {
+                                                            'id':
+                                                                currentSong.id,
+                                                            'title': currentSong
+                                                                .meta
+                                                                .title,
+                                                            'artist':
+                                                                currentSong
+                                                                    .meta
+                                                                    .artist,
+                                                            'imageUrl':
+                                                                currentSong
+                                                                    .meta
+                                                                    .imageUrl,
+                                                          },
+                                                        ),
                                             );
                                           },
                                         ),
@@ -349,11 +391,11 @@ class FullPlayerSheet extends StatelessWidget {
                                           onPressed: currentSong == null
                                               ? null
                                               : () {
-                                            _showAddToPlaylistSheet(
-                                              context,
-                                              currentSong,
-                                            );
-                                          },
+                                                  _showAddToPlaylistSheet(
+                                                    context,
+                                                    currentSong,
+                                                  );
+                                                },
                                         ),
                                       ],
                                     ),
@@ -375,17 +417,23 @@ class FullPlayerSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           ...upcomingWithIndices.map(
-                                (upcomingSong) => Padding(
+                            (upcomingSong) => Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: GlassContainer(
                                 child: ListTile(
                                   leading: ClipRRect(
+                                    clipBehavior: Clip.antiAlias,
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      upcomingSong.song.meta.imageUrl,
-                                      width: 48,
-                                      height: 48,
-                                      fit: BoxFit.cover,
+                                    child: Transform.scale(
+                                      scale: 1.9,
+                                      child: Image.network(
+                                        upcomingSong.song.meta.imageUrl,
+                                        width: 48,
+                                        height: 48,
+                                        fit: BoxFit.cover,
+                                        alignment: Alignment.center,
+                                        filterQuality: FilterQuality.medium,
+                                      ),
                                     ),
                                   ),
                                   title: Text(
@@ -440,10 +488,7 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
               children: [
                 const Text(
                   'Add to Playlist',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
 
@@ -457,35 +502,32 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                     .where((name) => name != PlaylistManager.systemFavourites)
                     .map(
                       (name) => ListTile(
-                    leading: const Icon(CupertinoIcons.music_note_list),
-                    title: Text(name),
-                    onTap: () async {
-                      final success = await PlaylistManager.addSong(
-                        name,
-                        {
-                          'id': song.id,
-                          'title': song.meta.title,
-                          'artist': song.meta.artist,
-                          'imageUrl': song.meta.imageUrl,
+                        leading: const Icon(CupertinoIcons.music_note_list),
+                        title: Text(name),
+                        onTap: () async {
+                          final success = await PlaylistManager.addSong(name, {
+                            'id': song.id,
+                            'title': song.meta.title,
+                            'artist': song.meta.artist,
+                            'imageUrl': song.meta.imageUrl,
+                          });
+
+                          Navigator.pop(context);
+
+                          if (success) {
+                            AppMessenger.show(
+                              'Added to "$name"',
+                              color: Colors.green.shade700,
+                            );
+                          } else {
+                            AppMessenger.show(
+                              'Already in "$name"',
+                              color: Colors.orange.shade700,
+                            );
+                          }
                         },
-                      );
-
-                      Navigator.pop(context);
-
-                      if (success) {
-                        AppMessenger.show(
-                          'Added to "$name"',
-                          color: Colors.green.shade700,
-                        );
-                      } else {
-                        AppMessenger.show(
-                          'Already in "$name"',
-                          color: Colors.orange.shade700,
-                        );
-                      }
-                    },
-                  ),
-                ),
+                      ),
+                    ),
 
                 const SizedBox(height: 8),
 
@@ -544,10 +586,7 @@ class _UpcomingSong {
   final QueuedSong song;
   final int absoluteIndex;
 
-  _UpcomingSong({
-    required this.song,
-    required this.absoluteIndex,
-  });
+  _UpcomingSong({required this.song, required this.absoluteIndex});
 }
 
 /// Auto marquee
@@ -555,10 +594,7 @@ class _AutoMarqueeText extends StatelessWidget {
   final String text;
   final TextStyle style;
 
-  const _AutoMarqueeText({
-    required this.text,
-    required this.style,
-  });
+  const _AutoMarqueeText({required this.text, required this.style});
 
   @override
   Widget build(BuildContext context) {

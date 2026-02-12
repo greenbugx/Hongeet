@@ -8,9 +8,10 @@ class YoutubeSongApi {
 
   static const Duration _primaryTimeout = Duration(seconds: 16);
   static const Duration _retryTimeout = Duration(seconds: 8);
-  static const Duration _urlOnlyTimeout = Duration(seconds: 12);
+  static const Duration _urlOnlyTimeout = Duration(seconds: 10);
 
   static final Map<String, _TimedStreamCache> _streamCache = {};
+  static final Map<String, Future<YoutubeExtractedStream>> _inFlight = {};
   static Map<String, String>? _cachedAuthHeaders;
 
   static Future<YoutubeExtractedStream> fetchBestStream(String videoId) async {
@@ -24,35 +25,64 @@ class YoutubeSongApi {
       return cached.stream;
     }
 
+    final inFlight = _inFlight[normalized];
+    if (inFlight != null) {
+      return inFlight;
+    }
+
+    final future = _fetchBestStreamInternal(normalized);
+    _inFlight[normalized] = future;
+
+    try {
+      return await future;
+    } finally {
+      if (identical(_inFlight[normalized], future)) {
+        _inFlight.remove(normalized);
+      }
+    }
+  }
+
+  static Future<String> fetchBestStreamUrl(String videoId) async {
+    final stream = await fetchBestStream(videoId);
+    return stream.url;
+  }
+
+  static Future<YoutubeExtractedStream> _fetchBestStreamInternal(
+    String normalized,
+  ) async {
     print('Extracting stream via yt-dlp for: $normalized');
     final authHeaders = await _loadAuthHeaders();
 
     dynamic response;
     try {
-      response = await _channel
-          .invokeMethod<dynamic>('extractAudio', {
-            'videoId': normalized,
-            'authHeaders': authHeaders,
-          })
-          .timeout(_primaryTimeout);
+      response = await _invokeExtractAudio(
+        normalized,
+        authHeaders,
+        timeout: _primaryTimeout,
+      );
     } on TimeoutException {
-      response = await _channel
-          .invokeMethod<dynamic>('extractAudio', {'videoId': normalized})
-          .timeout(_retryTimeout);
-    } on PlatformException {
-      response = await _channel
-          .invokeMethod<dynamic>('extractAudio', {'videoId': normalized})
-          .timeout(_retryTimeout);
+      if (authHeaders.isEmpty) rethrow;
+      response = await _invokeExtractAudio(
+        normalized,
+        const {},
+        timeout: _retryTimeout,
+      );
+    } on PlatformException catch (e) {
+      if (authHeaders.isEmpty || !_isAuthRetryableError(e)) rethrow;
+      response = await _invokeExtractAudio(
+        normalized,
+        const {},
+        timeout: _retryTimeout,
+      );
     }
 
     var stream = _coerceStream(response);
     if (stream == null) {
-      final url = await _channel
-          .invokeMethod<String>('extractAudioUrl', {
-            'videoId': normalized,
-            'authHeaders': authHeaders,
-          })
-          .timeout(_urlOnlyTimeout);
+      final url = await _invokeExtractAudioUrl(
+        normalized,
+        authHeaders,
+        timeout: _urlOnlyTimeout,
+      );
       if (url == null || url.trim().isEmpty) {
         throw Exception('No playable stream URL returned');
       }
@@ -64,9 +94,42 @@ class YoutubeSongApi {
     return stream;
   }
 
-  static Future<String> fetchBestStreamUrl(String videoId) async {
-    final stream = await fetchBestStream(videoId);
-    return stream.url;
+  static Future<dynamic> _invokeExtractAudio(
+    String videoId,
+    Map<String, String> authHeaders, {
+    required Duration timeout,
+  }) {
+    final payload = <String, dynamic>{'videoId': videoId};
+    if (authHeaders.isNotEmpty) {
+      payload['authHeaders'] = authHeaders;
+    }
+    return _channel
+        .invokeMethod<dynamic>('extractAudio', payload)
+        .timeout(timeout);
+  }
+
+  static Future<String?> _invokeExtractAudioUrl(
+    String videoId,
+    Map<String, String> authHeaders, {
+    required Duration timeout,
+  }) {
+    final payload = <String, dynamic>{'videoId': videoId};
+    if (authHeaders.isNotEmpty) {
+      payload['authHeaders'] = authHeaders;
+    }
+    return _channel
+        .invokeMethod<String>('extractAudioUrl', payload)
+        .timeout(timeout);
+  }
+
+  static bool _isAuthRetryableError(PlatformException e) {
+    final raw = '${e.code} ${e.message ?? ''}';
+    final lower = raw.toLowerCase();
+    return lower.contains('403') ||
+        lower.contains('forbidden') ||
+        lower.contains('access denied') ||
+        lower.contains('http error 401') ||
+        lower.contains('unauthorized');
   }
 
   static YoutubeExtractedStream? _coerceStream(dynamic raw) {
