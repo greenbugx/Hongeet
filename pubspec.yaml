@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.3.0+8
+version: 1.3.1+9
 
 environment:
   sdk: ^3.10.7
@@ -32,7 +32,6 @@ dependencies:
     sdk: flutter
 
   http: ^1.2.0
-  google_fonts: ^6.1.0
   flutter_svg: ^2.0.10
   provider: ^6.1.2
   just_audio: ^0.10.5
@@ -61,7 +60,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  flutter_launcher_icons: ^0.13.1
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -88,6 +87,50 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - response.json
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/google_fonts/Inter-Thin.ttf
+          weight: 100
+        - asset: assets/google_fonts/Inter-ThinItalic.ttf
+          weight: 100
+          style: italic
+        - asset: assets/google_fonts/Inter-Light.ttf
+          weight: 300
+        - asset: assets/google_fonts/Inter-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: assets/google_fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/google_fonts/Inter-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/google_fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/google_fonts/Inter-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/google_fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/google_fonts/Inter-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: assets/google_fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/google_fonts/Inter-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: assets/google_fonts/Inter-ExtraBold.ttf
+          weight: 800
+        - asset: assets/google_fonts/Inter-ExtraBoldItalic.ttf
+          weight: 800
+          style: italic
+        - asset: assets/google_fonts/Inter-Black.ttf
+          weight: 900
+        - asset: assets/google_fonts/Inter-BlackItalic.ttf
+          weight: 900
+          style: italic
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

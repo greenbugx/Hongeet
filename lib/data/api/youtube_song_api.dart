@@ -58,51 +58,115 @@ class YoutubeSongApi {
   }) async {
     AppLogger.info('Extracting stream via yt-dlp for: $normalized');
     final authHeaders = await _loadAuthHeaders();
+    const maxTransientAttempts = 3;
+    Object? lastError;
 
-    dynamic response;
-    try {
-      response = await _invokeExtractAudio(
-        normalized,
-        authHeaders,
-        dataSaver: dataSaver,
-        timeout: _primaryTimeout,
-      );
-    } on TimeoutException {
-      if (authHeaders.isEmpty) rethrow;
-      response = await _invokeExtractAudio(
-        normalized,
-        const {},
-        dataSaver: dataSaver,
-        timeout: _retryTimeout,
-      );
-    } on PlatformException catch (e) {
-      if (authHeaders.isEmpty || !_isAuthRetryableError(e)) rethrow;
-      response = await _invokeExtractAudio(
-        normalized,
-        const {},
-        dataSaver: dataSaver,
-        timeout: _retryTimeout,
-      );
-    }
+    for (var attempt = 1; attempt <= maxTransientAttempts; attempt++) {
+      try {
+        final stream = await _extractBestStreamOnce(
+          normalized,
+          authHeaders,
+          dataSaver: dataSaver,
+        );
 
-    var stream = _coerceStream(response);
-    if (stream == null) {
-      final url = await _invokeExtractAudioUrl(
-        normalized,
-        authHeaders,
-        dataSaver: dataSaver,
-        timeout: _urlOnlyTimeout,
-      );
-      if (url == null || url.trim().isEmpty) {
-        throw Exception('No playable stream URL returned');
+        _streamCache[_cacheKey(normalized, dataSaver: dataSaver)] =
+            _TimedStreamCache(stream);
+        _trimCache(_streamCache, maxEntries: 250);
+        return stream;
+      } catch (e, st) {
+        lastError = e;
+        final retryable = _isRetryableTransientExtractError(e);
+        final hasNext = attempt < maxTransientAttempts;
+
+        if (!retryable || !hasNext) {
+          rethrow;
+        }
+
+        AppLogger.warning(
+          'Transient extraction failure (attempt $attempt/$maxTransientAttempts), retrying',
+          error: e,
+          stackTrace: st,
+        );
+        await Future.delayed(Duration(milliseconds: 400 * attempt));
       }
-      stream = YoutubeExtractedStream(url.trim(), const {});
     }
 
-    _streamCache[_cacheKey(normalized, dataSaver: dataSaver)] =
-        _TimedStreamCache(stream);
-    _trimCache(_streamCache, maxEntries: 250);
-    return stream;
+    throw lastError ?? Exception('No playable stream URL returned');
+  }
+
+  static Future<YoutubeExtractedStream> _extractBestStreamOnce(
+    String normalized,
+    Map<String, String> authHeaders, {
+    required bool dataSaver,
+  }) async {
+    final attempts = <_NativeExtractAttempt>[
+      const _NativeExtractAttempt(
+        authHeaders: {},
+        timeout: _primaryTimeout,
+        label: 'no-auth-primary',
+      ),
+      if (authHeaders.isNotEmpty)
+        _NativeExtractAttempt(
+          authHeaders: authHeaders,
+          timeout: _retryTimeout,
+          label: 'auth-fallback',
+        ),
+      if (authHeaders.isNotEmpty)
+        const _NativeExtractAttempt(
+          authHeaders: {},
+          timeout: _retryTimeout,
+          label: 'no-auth-recheck',
+        ),
+    ];
+
+    Object? lastError;
+
+    for (final attempt in attempts) {
+      try {
+        final response = await _invokeExtractAudio(
+          normalized,
+          attempt.authHeaders,
+          dataSaver: dataSaver,
+          timeout: attempt.timeout,
+        );
+        final stream = _coerceStream(response);
+        if (stream != null) {
+          if (attempt.label != 'no-auth-primary') {
+            AppLogger.info(
+              'Extraction succeeded on ${attempt.label} for $normalized',
+            );
+          }
+          return stream;
+        }
+        lastError = Exception('No playable stream URL returned');
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    for (final attempt in attempts) {
+      try {
+        final url = await _invokeExtractAudioUrl(
+          normalized,
+          attempt.authHeaders,
+          dataSaver: dataSaver,
+          timeout: _urlOnlyTimeout,
+        );
+        if (url != null && url.trim().isNotEmpty) {
+          if (attempt.label != 'no-auth-primary') {
+            AppLogger.info(
+              'URL-only extraction succeeded on ${attempt.label} for $normalized',
+            );
+          }
+          return YoutubeExtractedStream(url.trim(), const {});
+        }
+        lastError = Exception('No playable stream URL returned');
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    throw lastError ?? Exception('No playable stream URL returned');
   }
 
   static Future<dynamic> _invokeExtractAudio(
@@ -141,14 +205,31 @@ class YoutubeSongApi {
         .timeout(timeout);
   }
 
-  static bool _isAuthRetryableError(PlatformException e) {
-    final raw = '${e.code} ${e.message ?? ''}';
-    final lower = raw.toLowerCase();
-    return lower.contains('403') ||
-        lower.contains('forbidden') ||
-        lower.contains('access denied') ||
-        lower.contains('http error 401') ||
-        lower.contains('unauthorized');
+  static bool _isRetryableTransientExtractError(Object error) {
+    if (error is TimeoutException) return true;
+
+    final lower = error.toString().toLowerCase();
+    if (lower.isEmpty) return false;
+
+    const retryableTokens = <String>[
+      'failed host lookup',
+      'no address associated with hostname',
+      'socketexception',
+      'transporterror',
+      'unable to download api page',
+      'network is unreachable',
+      'temporary failure in name resolution',
+      'connection reset',
+      'connection aborted',
+      'timed out',
+      'timeout',
+      'the page needs to be reloaded',
+      'page needs to be reloaded',
+      'failed to extract any player response',
+      'failed to extract player response',
+    ];
+
+    return retryableTokens.any(lower.contains);
   }
 
   static String _cacheKey(String videoId, {required bool dataSaver}) {
@@ -321,4 +402,16 @@ class _TimedStreamCache {
   bool isExpired(Duration ttl) {
     return DateTime.now().difference(timestamp) > ttl;
   }
+}
+
+class _NativeExtractAttempt {
+  final Map<String, String> authHeaders;
+  final Duration timeout;
+  final String label;
+
+  const _NativeExtractAttempt({
+    required this.authHeaders,
+    required this.timeout,
+    required this.label,
+  });
 }

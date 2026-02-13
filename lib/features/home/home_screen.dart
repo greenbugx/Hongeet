@@ -27,6 +27,14 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    const navBottomPadding = 12.0;
+    const miniGapAboveNav = 20.0;
+    final miniPlayerBottom =
+        kBottomNavigationBarHeight +
+        navBottomPadding +
+        miniGapAboveNav +
+        bottomInset;
     final tabs = <Widget>[
       SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
       const LibraryScreen(),
@@ -48,13 +56,18 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          const Positioned(left: 0, right: 0, bottom: 88, child: MiniPlayer()),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: miniPlayerBottom,
+            child: const MiniPlayer(),
+          ),
         ],
       ),
 
       // Bottom Navigation
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        padding: EdgeInsets.fromLTRB(12, 0, 12, navBottomPadding + bottomInset),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: Container(

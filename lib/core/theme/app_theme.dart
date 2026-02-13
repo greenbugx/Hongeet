@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/data_saver_settings.dart';
 
@@ -12,7 +11,7 @@ class AppTheme {
     brightness: Brightness.dark,
     scaffoldBackgroundColor: Colors.transparent,
     primaryColor: const Color(0xFF1DB954),
-    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+    textTheme: ThemeData.dark().textTheme.apply(fontFamily: 'Inter'),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -30,7 +29,7 @@ class AppTheme {
     brightness: Brightness.dark,
     scaffoldBackgroundColor: const Color(0xFF0D0D0D),
     primaryColor: const Color(0xFF1DB954),
-    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+    textTheme: ThemeData.dark().textTheme.apply(fontFamily: 'Inter'),
     appBarTheme: const AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation: 0,
