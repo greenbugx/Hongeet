@@ -169,6 +169,7 @@ Huge respect and thanks to:
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — the backbone of modern media downloading
 - [youtubedl-android](https://github.com/yausername/youtubedl-android) — making yt-dlp usable on Android
+- [ytmusicapi](https://github.com/sigma67/ytmusicapi) - for YouTube Music metadata & streaming access
 - [Saavn API(Unofficial)](https://github.com/sumitkolhe/jiosaavn-api) — for Jio Saavn metadata & streaming access
 
 This project wouldn’t exist without them.
