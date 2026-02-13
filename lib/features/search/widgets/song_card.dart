@@ -13,6 +13,12 @@ class SongCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = song.imageUrl.trim();
+    final imageScale = YoutubeThumbnailUtils.preferredArtworkScale(
+      songId: song.id,
+      imageUrl: imageUrl,
+      youtubeVideoScale: 2.0,
+      normalScale: 1.0,
+    );
     final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
       songId: song.id,
       imageUrl: imageUrl,
@@ -36,7 +42,7 @@ class SongCard extends StatelessWidget {
                 ),
                 child: imageCandidates.isNotEmpty
                     ? Transform.scale(
-                        scale: 2.0,
+                        scale: imageScale,
                         child: FallbackNetworkImage(
                           urls: imageCandidates,
                           width: double.infinity,

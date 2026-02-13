@@ -69,6 +69,11 @@ class _MiniPlayerContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final animateMiniVisuals = perfMode == UiPerformanceMode.full;
+    final imageScale = YoutubeThumbnailUtils.preferredArtworkScale(
+      imageUrl: now.imageUrl,
+      youtubeVideoScale: 1.9,
+      normalScale: 1.0,
+    );
     final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
       imageUrl: now.imageUrl,
     );
@@ -110,7 +115,7 @@ class _MiniPlayerContent extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     borderRadius: BorderRadius.circular(10),
                     child: Transform.scale(
-                      scale: 1.9,
+                      scale: imageScale,
                       child: FallbackNetworkImage(
                         urls: imageCandidates,
                         width: 48,

@@ -30,8 +30,8 @@ class _SearchScreenState extends State<SearchScreen> {
   static const int _maxSessionCacheEntries = 80;
   static const String _quickPicksQuery = 'trending music';
   static const Duration _quickPicksCacheTtl = Duration(hours: 12);
-  static const String _quickPicksCacheDataPrefix = 'quick_picks_cache_v1_';
-  static const String _quickPicksCacheTsPrefix = 'quick_picks_cache_ts_v1_';
+  static const String _quickPicksCacheDataPrefix = 'quick_picks_cache_v2_';
+  static const String _quickPicksCacheTsPrefix = 'quick_picks_cache_ts_v2_';
   static const int _quickPicksTargetCount = 24;
   static const List<String> _globallyBlockedTitleTokens = <String>[
     'trending',

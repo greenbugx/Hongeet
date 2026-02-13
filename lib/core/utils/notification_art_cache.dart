@@ -15,8 +15,8 @@ class NotificationArtCache {
 
   static const int _targetSize = 512;
   static const Duration _downloadTimeout = Duration(seconds: 8);
-  static const double _notificationZoomCrop = 0.70;
-  static const String _cacheVersion = 'v2_zoom70';
+  static const double _notificationZoomCrop = 1.0;
+  static const String _cacheVersion = 'v3_nozoom';
 
   static Future<Uri?> getSquareArtUri(String imageUrl) async {
     final normalized = imageUrl.trim();

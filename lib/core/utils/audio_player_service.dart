@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
 import 'app_logger.dart';
+import 'data_saver_settings.dart';
 import '../../data/api/saavn_song_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../data/api/youtube_api.dart';
@@ -83,7 +84,8 @@ class AudioPlayerService {
   };
 
   Future<_ResolvedStream> _resolveUrl(String id) async {
-    final cacheKey = id;
+    final qualityKey = DataSaverSettings.isEnabled ? 'ds' : 'hq';
+    final cacheKey = '$id::$qualityKey';
     final bool isYoutube = id.startsWith('yt:');
 
     if (_urlCache.containsKey(cacheKey)) {

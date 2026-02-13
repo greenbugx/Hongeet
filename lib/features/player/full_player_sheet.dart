@@ -75,6 +75,12 @@ class FullPlayerSheet extends StatelessWidget {
             final currentSong = index >= 0 && index < queue.length
                 ? queue[index]
                 : null;
+            final currentArtScale = YoutubeThumbnailUtils.preferredArtworkScale(
+              songId: currentSong?.id,
+              imageUrl: now.imageUrl,
+              youtubeVideoScale: 1.9,
+              normalScale: 1.0,
+            );
             final currentArtCandidates = YoutubeThumbnailUtils.candidateUrls(
               songId: currentSong?.id,
               imageUrl: now.imageUrl,
@@ -137,7 +143,7 @@ class FullPlayerSheet extends StatelessWidget {
                                       clipBehavior: Clip.antiAlias,
                                       borderRadius: BorderRadius.circular(22),
                                       child: Transform.scale(
-                                        scale: 1.9,
+                                        scale: currentArtScale,
                                         child: FallbackNetworkImage(
                                           urls: currentArtCandidates,
                                           fit: BoxFit.cover,
@@ -528,7 +534,16 @@ class FullPlayerSheet extends StatelessWidget {
                                       clipBehavior: Clip.antiAlias,
                                       borderRadius: BorderRadius.circular(8),
                                       child: Transform.scale(
-                                        scale: 1.9,
+                                        scale:
+                                            YoutubeThumbnailUtils.preferredArtworkScale(
+                                              songId: upcomingSong.song.id,
+                                              imageUrl: upcomingSong
+                                                  .song
+                                                  .meta
+                                                  .imageUrl,
+                                              youtubeVideoScale: 1.9,
+                                              normalScale: 1.0,
+                                            ),
                                         child: FallbackNetworkImage(
                                           urls:
                                               YoutubeThumbnailUtils.candidateUrls(

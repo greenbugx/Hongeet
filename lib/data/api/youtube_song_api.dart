@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/app_logger.dart';
+import '../../core/utils/data_saver_settings.dart';
 
 class YoutubeSongApi {
   static const MethodChannel _channel = MethodChannel('youtube_extractor');
@@ -20,25 +22,27 @@ class YoutubeSongApi {
     if (normalized.isEmpty) {
       throw Exception('videoId is required');
     }
+    final dataSaver = await _isDataSaverEnabled();
+    final cacheKey = _cacheKey(normalized, dataSaver: dataSaver);
 
-    final cached = _streamCache[normalized];
+    final cached = _streamCache[cacheKey];
     if (cached != null && !cached.isExpired(const Duration(hours: 1))) {
       return cached.stream;
     }
 
-    final inFlight = _inFlight[normalized];
+    final inFlight = _inFlight[cacheKey];
     if (inFlight != null) {
       return inFlight;
     }
 
-    final future = _fetchBestStreamInternal(normalized);
-    _inFlight[normalized] = future;
+    final future = _fetchBestStreamInternal(normalized, dataSaver: dataSaver);
+    _inFlight[cacheKey] = future;
 
     try {
       return await future;
     } finally {
-      if (identical(_inFlight[normalized], future)) {
-        _inFlight.remove(normalized);
+      if (identical(_inFlight[cacheKey], future)) {
+        _inFlight.remove(cacheKey);
       }
     }
   }
@@ -49,8 +53,9 @@ class YoutubeSongApi {
   }
 
   static Future<YoutubeExtractedStream> _fetchBestStreamInternal(
-    String normalized,
-  ) async {
+    String normalized, {
+    required bool dataSaver,
+  }) async {
     AppLogger.info('Extracting stream via yt-dlp for: $normalized');
     final authHeaders = await _loadAuthHeaders();
 
@@ -59,6 +64,7 @@ class YoutubeSongApi {
       response = await _invokeExtractAudio(
         normalized,
         authHeaders,
+        dataSaver: dataSaver,
         timeout: _primaryTimeout,
       );
     } on TimeoutException {
@@ -66,6 +72,7 @@ class YoutubeSongApi {
       response = await _invokeExtractAudio(
         normalized,
         const {},
+        dataSaver: dataSaver,
         timeout: _retryTimeout,
       );
     } on PlatformException catch (e) {
@@ -73,6 +80,7 @@ class YoutubeSongApi {
       response = await _invokeExtractAudio(
         normalized,
         const {},
+        dataSaver: dataSaver,
         timeout: _retryTimeout,
       );
     }
@@ -82,6 +90,7 @@ class YoutubeSongApi {
       final url = await _invokeExtractAudioUrl(
         normalized,
         authHeaders,
+        dataSaver: dataSaver,
         timeout: _urlOnlyTimeout,
       );
       if (url == null || url.trim().isEmpty) {
@@ -90,7 +99,8 @@ class YoutubeSongApi {
       stream = YoutubeExtractedStream(url.trim(), const {});
     }
 
-    _streamCache[normalized] = _TimedStreamCache(stream);
+    _streamCache[_cacheKey(normalized, dataSaver: dataSaver)] =
+        _TimedStreamCache(stream);
     _trimCache(_streamCache, maxEntries: 250);
     return stream;
   }
@@ -98,9 +108,13 @@ class YoutubeSongApi {
   static Future<dynamic> _invokeExtractAudio(
     String videoId,
     Map<String, String> authHeaders, {
+    required bool dataSaver,
     required Duration timeout,
   }) {
-    final payload = <String, dynamic>{'videoId': videoId};
+    final payload = <String, dynamic>{
+      'videoId': videoId,
+      'dataSaver': dataSaver,
+    };
     if (authHeaders.isNotEmpty) {
       payload['authHeaders'] = authHeaders;
     }
@@ -112,9 +126,13 @@ class YoutubeSongApi {
   static Future<String?> _invokeExtractAudioUrl(
     String videoId,
     Map<String, String> authHeaders, {
+    required bool dataSaver,
     required Duration timeout,
   }) {
-    final payload = <String, dynamic>{'videoId': videoId};
+    final payload = <String, dynamic>{
+      'videoId': videoId,
+      'dataSaver': dataSaver,
+    };
     if (authHeaders.isNotEmpty) {
       payload['authHeaders'] = authHeaders;
     }
@@ -131,6 +149,18 @@ class YoutubeSongApi {
         lower.contains('access denied') ||
         lower.contains('http error 401') ||
         lower.contains('unauthorized');
+  }
+
+  static String _cacheKey(String videoId, {required bool dataSaver}) {
+    return '$videoId::${dataSaver ? "ds" : "hq"}';
+  }
+
+  static Future<bool> _isDataSaverEnabled() async {
+    if (DataSaverSettings.isEnabled) return true;
+    final prefs = await SharedPreferences.getInstance();
+    final enabled = prefs.getBool(DataSaverSettings.prefKey) ?? false;
+    DataSaverSettings.setInMemory(enabled);
+    return enabled;
   }
 
   static YoutubeExtractedStream? _coerceStream(dynamic raw) {

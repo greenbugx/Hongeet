@@ -55,7 +55,14 @@ class _SettingsScreenState extends State<SettingsScreen>
     final m = await BatteryOptimizationHelper.getManufacturer();
     final ignored = await BatteryOptimizationHelper.isIgnoringOptimizations();
 
-    if (!BatteryOptimizationHelper.isAggressiveOEM(m)) return;
+    if (!BatteryOptimizationHelper.isAggressiveOEM(m)) {
+      if (!mounted) return;
+      setState(() {
+        manufacturer = m;
+        showBatteryWarning = false;
+      });
+      return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
 
@@ -127,15 +134,31 @@ class _SettingsScreenState extends State<SettingsScreen>
             child: const Text('Later'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              BatteryOptimizationHelper.requestDisableOptimization();
+              await _requestBatteryOptimizationFix();
             },
             child: const Text('Fix now'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _requestBatteryOptimizationFix() async {
+    final launched =
+        await BatteryOptimizationHelper.requestDisableOptimization();
+    if (!mounted) return;
+    if (!launched) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open battery settings on this device'),
+        ),
+      );
+      return;
+    }
+
+    Future<void>.delayed(const Duration(milliseconds: 600), _checkBattery);
   }
 
   bool _canUseGlassTheme(BuildContext context) {
@@ -198,6 +221,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     return const [ProgressBarStyle.defaultStyle, ProgressBarStyle.snake];
   }
 
+  String _dataSaverDescription(bool enabled) {
+    return enabled
+        ? 'Enabled: streams use up to ~120 kbps and artwork uses lower-medium quality to reduce data usage.'
+        : 'Disabled: uses best available audio quality and high-resolution artwork.';
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -222,8 +251,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                   'Disable battery optimization to keep Hongeet playing.',
                 ),
                 trailing: const Icon(Icons.open_in_new),
-                onTap: () {
-                  BatteryOptimizationHelper.requestDisableOptimization();
+                onTap: () async {
+                  await _requestBatteryOptimizationFix();
                 },
               ),
             ),
@@ -245,6 +274,11 @@ class _SettingsScreenState extends State<SettingsScreen>
                 }
                 themeProvider.setUseGlassTheme(enabled);
               },
+              secondary: Icon(
+                themeProvider.useGlassTheme
+                    ? CupertinoIcons.settings
+                    : Icons.blur_on,
+              ),
               title: const Text('Glass UI Theme'),
               subtitle: Text(
                 canUseGlassTheme
@@ -328,10 +362,35 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           GlassContainer(
             child: SwitchListTile(
+              value: themeProvider.dataSaverEnabled,
+              onChanged: (enabled) {
+                themeProvider.setDataSaverEnabled(enabled);
+              },
+              secondary: Icon(
+                themeProvider.useGlassTheme
+                    ? CupertinoIcons.antenna_radiowaves_left_right
+                    : Icons.data_saver_on,
+              ),
+              title: const Text('Data Saver'),
+              subtitle: Text(
+                _dataSaverDescription(themeProvider.dataSaverEnabled),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          GlassContainer(
+            child: SwitchListTile(
               value: !_useYoutubeService,
               onChanged: (v) {
                 if (v) _setMusicServicePreference(false);
               },
+              secondary: Icon(
+                themeProvider.useGlassTheme
+                    ? CupertinoIcons.music_albums
+                    : Icons.library_music,
+              ),
               title: const Text('Saavn Service'),
               subtitle: const Text('Use Saavn as the music Service'),
             ),
@@ -345,6 +404,11 @@ class _SettingsScreenState extends State<SettingsScreen>
               onChanged: (v) {
                 if (v) _setMusicServicePreference(true);
               },
+              secondary: Icon(
+                themeProvider.useGlassTheme
+                    ? CupertinoIcons.play_circle
+                    : Icons.smart_display,
+              ),
               title: const Text('Youtube Service'),
               subtitle: const Text('Use Youtube as the music Service'),
             ),

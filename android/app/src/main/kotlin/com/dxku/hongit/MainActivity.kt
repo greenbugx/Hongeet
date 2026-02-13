@@ -56,12 +56,7 @@ class MainActivity : AudioServiceActivity() {
                 }
 
                 "request" -> {
-                    val intent = Intent(
-                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                        Uri.parse("package:$packageName")
-                    )
-                    startActivity(intent)
-                    result.success(null)
+                    result.success(openBatteryOptimizationSettings())
                 }
 
                 else -> result.notImplemented()
@@ -80,6 +75,7 @@ class MainActivity : AudioServiceActivity() {
             when (call.method) {
                 "extractAudio" -> {
                     val videoId = call.argument<String>("videoId")?.trim().orEmpty()
+                    val dataSaver = call.argument<Boolean>("dataSaver") ?: false
                     val authHeaders = call.argument<Map<String, Any?>>("authHeaders").toStringMap()
                     if (videoId.isBlank()) {
                         result.error("missing_video_id", "videoId is required", null)
@@ -88,7 +84,7 @@ class MainActivity : AudioServiceActivity() {
 
                     runBg {
                         try {
-                            val payload = extractBestAudio(videoId, authHeaders)
+                            val payload = extractBestAudio(videoId, authHeaders, dataSaver)
                             mainHandler.post { result.success(payload) }
                         } catch (e: Exception) {
                             mainHandler.post {
@@ -100,6 +96,7 @@ class MainActivity : AudioServiceActivity() {
 
                 "extractAudioUrl" -> {
                     val videoId = call.argument<String>("videoId")?.trim().orEmpty()
+                    val dataSaver = call.argument<Boolean>("dataSaver") ?: false
                     val authHeaders = call.argument<Map<String, Any?>>("authHeaders").toStringMap()
                     if (videoId.isBlank()) {
                         result.error("missing_video_id", "videoId is required", null)
@@ -108,7 +105,7 @@ class MainActivity : AudioServiceActivity() {
 
                     runBg {
                         try {
-                            val payload = extractBestAudio(videoId, authHeaders)
+                            val payload = extractBestAudio(videoId, authHeaders, dataSaver)
                             val url = payload["url"] as? String
                                 ?: throw IllegalStateException("No playable audio URL extracted")
                             mainHandler.post { result.success(url) }
@@ -150,25 +147,32 @@ class MainActivity : AudioServiceActivity() {
 
     private fun extractBestAudio(
         videoId: String,
-        authHeaders: Map<String, String>
+        authHeaders: Map<String, String>,
+        dataSaver: Boolean
     ): Map<String, Any?> {
         val hasAuthHeaders = authHeaders.isNotEmpty()
+        val preferredFormat = if (dataSaver) {
+            "bestaudio[abr<=128][ext=m4a]/bestaudio[abr<=128][ext=webm]/" +
+                "bestaudio[abr<=128]/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best"
+        } else {
+            "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best"
+        }
         val attempts = listOf(
             ExtractAttempt(
                 label = "android-fast",
-                formatSelector = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                formatSelector = preferredFormat,
                 extractorArgs = "youtube:player_client=android;player_skip=webpage,configs",
                 useAuthHeaders = false
             ),
             ExtractAttempt(
                 label = "android-web-auth",
-                formatSelector = "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+                formatSelector = preferredFormat,
                 extractorArgs = "youtube:player_client=android,web",
                 useAuthHeaders = true
             ),
             ExtractAttempt(
                 label = "compat-auth",
-                formatSelector = "bestaudio/best",
+                formatSelector = if (dataSaver) "bestaudio[abr<=128]/bestaudio/best" else "bestaudio/best",
                 extractorArgs = null,
                 useAuthHeaders = true
             )
@@ -349,6 +353,115 @@ class MainActivity : AudioServiceActivity() {
         lower["origin"]?.let { normalized["Origin"] = it }
 
         return normalized
+    }
+
+    private fun openBatteryOptimizationSettings(): Boolean {
+        val packageUri = Uri.parse("package:$packageName")
+        val manufacturer = Build.MANUFACTURER.lowercase()
+
+        val intents = mutableListOf<Intent>()
+
+        intents += Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            packageUri
+        )
+        intents += Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+
+        if (
+            manufacturer.contains("xiaomi") ||
+            manufacturer.contains("redmi") ||
+            manufacturer.contains("poco")
+        ) {
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.miui.powerkeeper",
+                    "com.miui.powerkeeper.ui.HiddenAppsConfigActivity"
+                )
+                putExtra("package_name", packageName)
+                putExtra("package_label", applicationInfo.loadLabel(packageManager).toString())
+            }
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                )
+            }
+        }
+
+        if (
+            manufacturer.contains("oppo") ||
+            manufacturer.contains("realme") ||
+            manufacturer.contains("oneplus")
+        ) {
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.coloros.oppoguardelf",
+                    "com.coloros.powermanager.fuelgaue.PowerUsageModelActivity"
+                )
+            }
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.oplus.battery",
+                    "com.oplus.powermanager.fuelgaue.PowerUsageModelActivity"
+                )
+            }
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.coloros.safecenter",
+                    "com.coloros.privacypermissionsentry.PermissionTopActivity"
+                )
+            }
+        }
+
+        if (manufacturer.contains("vivo")) {
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.vivo.abe",
+                    "com.vivo.applicationbehaviorengine.ui.ExcessivePowerManagerActivity"
+                )
+            }
+        }
+
+        if (manufacturer.contains("huawei") || manufacturer.contains("honor")) {
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.optimize.process.ProtectActivity"
+                )
+            }
+            intents += Intent().apply {
+                component = android.content.ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity"
+                )
+            }
+        }
+
+        intents += Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+
+        for (intent in intents) {
+            if (tryLaunchSettingsIntent(intent)) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private fun tryLaunchSettingsIntent(intent: Intent): Boolean {
+        return try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val resolver = intent.resolveActivity(packageManager)
+            if (resolver == null) {
+                false
+            } else {
+                startActivity(intent)
+                true
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Battery settings intent failed: ${e.message}")
+            false
+        }
     }
 
     private fun Map<String, Any?>?.toStringMap(): Map<String, String> {

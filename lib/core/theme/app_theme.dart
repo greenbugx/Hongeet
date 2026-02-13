@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/data_saver_settings.dart';
 
 enum ProgressBarStyle { defaultStyle, snake, glass }
 
@@ -48,6 +49,7 @@ class ThemeProvider with ChangeNotifier {
   static const _useGlassThemeKey = 'use_glass_theme';
   static const _progressBarStyleKey = 'progress_bar_style';
   static const _uiPerformanceModeKey = 'ui_performance_mode';
+  static const _dataSaverKey = DataSaverSettings.prefKey;
 
   bool _useGlassTheme = false;
   bool get useGlassTheme => _useGlassTheme;
@@ -63,6 +65,9 @@ class ThemeProvider with ChangeNotifier {
 
   UiPerformanceMode _uiPerformanceMode = UiPerformanceMode.auto;
   UiPerformanceMode get uiPerformanceMode => _uiPerformanceMode;
+
+  bool _dataSaverEnabled = false;
+  bool get dataSaverEnabled => _dataSaverEnabled;
 
   ThemeData get currentTheme =>
       _useGlassTheme ? AppTheme.glassTheme : AppTheme.simpleDarkTheme;
@@ -87,6 +92,8 @@ class ThemeProvider with ChangeNotifier {
       (mode) => mode.name == perfRaw,
       orElse: () => UiPerformanceMode.auto,
     );
+    _dataSaverEnabled = prefs.getBool(_dataSaverKey) ?? false;
+    DataSaverSettings.setInMemory(_dataSaverEnabled);
 
     if (!_useGlassTheme && _progressBarStyle == ProgressBarStyle.glass) {
       _progressBarStyle = ProgressBarStyle.defaultStyle;
@@ -129,6 +136,15 @@ class ThemeProvider with ChangeNotifier {
     _uiPerformanceMode = mode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_uiPerformanceModeKey, _uiPerformanceMode.name);
+    notifyListeners();
+  }
+
+  Future<void> setDataSaverEnabled(bool enabled) async {
+    if (_dataSaverEnabled == enabled) return;
+    _dataSaverEnabled = enabled;
+    DataSaverSettings.setInMemory(enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_dataSaverKey, enabled);
     notifyListeners();
   }
 

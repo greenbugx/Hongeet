@@ -124,16 +124,19 @@ class BackgroundAudioHandler extends BaseAudioHandler
         return '';
       }
 
-      final hqDefault = pickByToken('/hqdefault.jpg');
+      final maxRes = pickByToken('/maxresdefault.jpg');
       final sdDefault = pickByToken('/sddefault.jpg');
       final hq720 = pickByToken('/hq720.jpg');
+      final hqDefault = pickByToken('/hqdefault.jpg');
 
-      final preferred = hqDefault.isNotEmpty
-          ? hqDefault
+      final preferred = maxRes.isNotEmpty
+          ? maxRes
           : sdDefault.isNotEmpty
           ? sdDefault
           : hq720.isNotEmpty
           ? hq720
+          : hqDefault.isNotEmpty
+          ? hqDefault
           : candidates.isNotEmpty
           ? candidates.first
           : imageUrl;
