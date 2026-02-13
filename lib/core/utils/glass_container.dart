@@ -22,22 +22,12 @@ class GlassContainer extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     if (themeProvider.useGlassTheme) {
-      return ClipRRect(
-        borderRadius: borderRadius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(opacity),
-              borderRadius: borderRadius,
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-              ),
-            ),
-            child: child,
-          ),
-        ),
-      );
+      final clampedOpacity = opacity.clamp(0.0, 1.0).toDouble();
+      final effectiveBlur = blur.clamp(0.0, 60.0).toDouble();
+      if (effectiveBlur <= 0.1) {
+        return _buildGlassTint(clampedOpacity);
+      }
+      return _buildBlurredGlass(effectiveBlur, clampedOpacity);
     } else {
       return Container(
         decoration: BoxDecoration(
@@ -47,5 +37,26 @@ class GlassContainer extends StatelessWidget {
         child: child,
       );
     }
+  }
+
+  Widget _buildGlassTint(double clampedOpacity) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: clampedOpacity),
+        borderRadius: borderRadius,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildBlurredGlass(double effectiveBlur, double clampedOpacity) {
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: effectiveBlur, sigmaY: effectiveBlur),
+        child: _buildGlassTint(clampedOpacity),
+      ),
+    );
   }
 }

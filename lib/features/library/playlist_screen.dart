@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/audio_player_service.dart';
+import '../../core/utils/youtube_thumbnail_utils.dart';
+import '../../core/widgets/fallback_network_image.dart';
 import '../../core/utils/glass_container.dart';
 import '../../core/utils/glass_page.dart';
 import '../../core/theme/app_theme.dart';
@@ -13,27 +15,61 @@ import '../player/mini_player.dart';
 class PlaylistScreen extends StatefulWidget {
   final String name;
 
-  const PlaylistScreen({
-    super.key,
-    required this.name,
-  });
+  const PlaylistScreen({super.key, required this.name});
 
   @override
   State<PlaylistScreen> createState() => _PlaylistScreenState();
 }
 
 class _PlaylistScreenState extends State<PlaylistScreen> {
+  Widget _buildAnimatedSongEntry({
+    required Widget child,
+    required int index,
+    required bool animate,
+    Key? key,
+  }) {
+    if (!animate) {
+      return KeyedSubtree(key: key, child: child);
+    }
+
+    return TweenAnimationBuilder<double>(
+      key: key,
+      duration: Duration(milliseconds: 300 + (index * 50)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 20 * (1 - value)),
+          child: Opacity(opacity: value, child: child),
+        );
+      },
+      child: child,
+    );
+  }
+
   void _showSongOptions(
-      BuildContext context,
-      Map<String, dynamic> song,
-      ThemeProvider theme,
-      ) {
+    BuildContext context,
+    Map<String, dynamic> song,
+    ThemeProvider theme,
+  ) {
+    final perfMode = theme.resolvedUiPerformanceMode(context);
+    final thumbFilterQuality = perfMode == UiPerformanceMode.full
+        ? FilterQuality.medium
+        : FilterQuality.low;
+
+    final songId = (song['id'] ?? '').toString().trim();
+    final imageUrl = (song['imageUrl'] ?? '').toString().trim();
+    final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
+      songId: songId,
+      imageUrl: imageUrl,
+    );
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.9),
+          color: Colors.black.withValues(alpha: 0.9),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -57,12 +93,13 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      song['imageUrl'],
+                    child: FallbackNetworkImage(
+                      urls: imageCandidates,
                       width: 56,
                       height: 56,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      filterQuality: thumbFilterQuality,
+                      fallback: Container(
                         width: 56,
                         height: 56,
                         color: Colors.white12,
@@ -153,6 +190,11 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Widget build(BuildContext context) {
     final player = AudioPlayerService();
     final theme = Provider.of<ThemeProvider>(context);
+    final perfMode = theme.resolvedUiPerformanceMode(context);
+    final animateEntries = perfMode == UiPerformanceMode.full;
+    final thumbFilterQuality = perfMode == UiPerformanceMode.full
+        ? FilterQuality.medium
+        : FilterQuality.low;
 
     return GlassPage(
       child: StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
@@ -225,32 +267,28 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                     final index = entry.key;
                     final song = entry.value;
 
-                    return TweenAnimationBuilder<double>(
+                    return _buildAnimatedSongEntry(
                       key: ValueKey(song['id']),
-                      duration: Duration(milliseconds: 300 + (index * 50)),
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      curve: Curves.easeOutCubic,
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(0, 20 * (1 - value)),
-                          child: Opacity(
-                            opacity: value,
-                            child: child,
-                          ),
-                        );
-                      },
+                      index: index,
+                      animate: animateEntries,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassContainer(
                           child: ListTile(
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                song['imageUrl'],
+                              child: FallbackNetworkImage(
+                                urls: YoutubeThumbnailUtils.candidateUrls(
+                                  songId: (song['id'] ?? '').toString().trim(),
+                                  imageUrl: (song['imageUrl'] ?? '')
+                                      .toString()
+                                      .trim(),
+                                ),
                                 width: 48,
                                 height: 48,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+                                filterQuality: thumbFilterQuality,
+                                fallback: Container(
                                   width: 48,
                                   height: 48,
                                   color: Colors.white12,
@@ -266,7 +304,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                     ? CupertinoIcons.ellipsis_vertical
                                     : Icons.more_vert,
                               ),
-                              onPressed: () => _showSongOptions(context, song, theme),
+                              onPressed: () =>
+                                  _showSongOptions(context, song, theme),
                             ),
                             onTap: () async {
                               final queued = songs.map((s) {

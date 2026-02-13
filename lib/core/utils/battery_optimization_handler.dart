@@ -9,9 +9,11 @@ class BatteryOptimizationHelper {
     return await _channel.invokeMethod('isIgnoring');
   }
 
-  static Future<void> requestDisableOptimization() async {
-    if (!Platform.isAndroid) return;
-    await _channel.invokeMethod('request');
+  static Future<bool> requestDisableOptimization() async {
+    if (!Platform.isAndroid) return true;
+    final launched = await _channel.invokeMethod<dynamic>('request');
+    if (launched is bool) return launched;
+    return true;
   }
 
   static Future<String> getManufacturer() async {

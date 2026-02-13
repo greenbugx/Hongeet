@@ -20,6 +20,7 @@ GeneratedPluginRegistrant.java
 
 # Local configuration files
 key.properties
+key.properties.example
 local.properties
 
 # Keystore files

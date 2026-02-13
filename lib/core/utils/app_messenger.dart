@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 
 class AppMessenger {
   static final GlobalKey<NavigatorState> navigatorKey =
-  GlobalKey<NavigatorState>();
+      GlobalKey<NavigatorState>();
 
   static OverlayEntry? _entry;
 
   static void show(
-      String message, {
-        Color? color,
-        Duration duration = const Duration(seconds: 2),
-      }) {
+    String message, {
+    Color? color,
+    Duration duration = const Duration(seconds: 2),
+  }) {
     final overlay = navigatorKey.currentState?.overlay;
     if (overlay == null) return;
 
@@ -24,7 +24,7 @@ class AppMessenger {
             padding: const EdgeInsets.only(bottom: 90, left: 16, right: 16),
             child: _Toast(
               message: message,
-              color: color ?? Colors.black.withOpacity(0.85),
+              color: color ?? Colors.black.withValues(alpha: 0.85),
             ),
           ),
         ),
@@ -44,10 +44,7 @@ class _Toast extends StatelessWidget {
   final String message;
   final Color color;
 
-  const _Toast({
-    required this.message,
-    required this.color,
-  });
+  const _Toast({required this.message, required this.color});
 
   @override
   Widget build(BuildContext context) {

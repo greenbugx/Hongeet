@@ -39,10 +39,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
         title: const Text('Delete Song'),
         content: Text('Are you sure you want to delete ${song.name}?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -55,7 +61,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  void _showPlaylistOptions(BuildContext context, String playlistName, ThemeProvider theme) {
+  void _showPlaylistOptions(
+    BuildContext context,
+    String playlistName,
+    ThemeProvider theme,
+  ) {
     if (playlistName == PlaylistManager.systemFavourites) {
       return;
     }
@@ -65,7 +75,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.9),
+          color: Colors.black.withValues(alpha: 0.9),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
@@ -116,7 +126,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   context: context,
                   builder: (ctx2) => AlertDialog(
                     title: const Text('Delete Playlist'),
-                    content: Text('Are you sure you want to delete "$playlistName"? This cannot be undone.'),
+                    content: Text(
+                      'Are you sure you want to delete "$playlistName"? This cannot be undone.',
+                    ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(ctx2, false),
@@ -124,7 +136,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       ),
                       TextButton(
                         onPressed: () => Navigator.pop(ctx2, true),
-                        child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+                        child: const Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
                       ),
                     ],
                   ),
@@ -160,7 +175,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget _buildAnimatedListItem({
     required Widget child,
     required int index,
+    required bool animate,
   }) {
+    if (!animate) return child;
+
     return TweenAnimationBuilder<double>(
       duration: Duration(milliseconds: 200 + (index * 50)),
       tween: Tween(begin: 0.0, end: 1.0),
@@ -168,10 +186,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       builder: (context, value, child) {
         return Transform.translate(
           offset: Offset(20 * (1 - value), 0),
-          child: Opacity(
-            opacity: value,
-            child: child,
-          ),
+          child: Opacity(opacity: value, child: child),
         );
       },
       child: child,
@@ -182,6 +197,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     final player = AudioPlayerService();
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
+    final animateListItems = perfMode == UiPerformanceMode.full;
 
     return GlassPage(
       child: RefreshIndicator(
@@ -214,22 +231,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
                     return _buildAnimatedListItem(
                       index: index,
+                      animate: animateListItems,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassContainer(
                           child: ListTile(
-                            leading: Icon(themeProvider.useGlassTheme
-                                ? CupertinoIcons.arrow_down_circle
-                                : Icons.download_done),
+                            leading: Icon(
+                              themeProvider.useGlassTheme
+                                  ? CupertinoIcons.arrow_down_circle
+                                  : Icons.download_done,
+                            ),
                             title: Text(song.name),
                             onTap: () {
                               player.playLocalFile(song.path, song.name);
                               AppMessenger.show('Playing ${song.name}');
                             },
                             trailing: IconButton(
-                              icon: Icon(themeProvider.useGlassTheme
-                                  ? CupertinoIcons.ellipsis
-                                  : Icons.more_vert),
+                              icon: Icon(
+                                themeProvider.useGlassTheme
+                                    ? CupertinoIcons.ellipsis
+                                    : Icons.more_vert,
+                              ),
                               onPressed: () => _deleteSong(song),
                             ),
                           ),
@@ -256,12 +278,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 if (playlists.isEmpty) return _empty('No playlists');
 
                 return Column(
-                  children: playlists.keys.toList().asMap().entries.map((entry) {
+                  children: playlists.keys.toList().asMap().entries.map((
+                    entry,
+                  ) {
                     final index = entry.key;
                     final name = entry.value;
 
                     return _buildAnimatedListItem(
                       index: index,
+                      animate: animateListItems,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassContainer(
@@ -280,37 +305,54 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             trailing: name == PlaylistManager.systemFavourites
                                 ? null
                                 : IconButton(
-                              icon: Icon(
-                                themeProvider.useGlassTheme
-                                    ? CupertinoIcons.ellipsis
-                                    : Icons.more_vert,
-                              ),
-                              onPressed: () => _showPlaylistOptions(context, name, themeProvider),
-                            ),
+                                    icon: Icon(
+                                      themeProvider.useGlassTheme
+                                          ? CupertinoIcons.ellipsis
+                                          : Icons.more_vert,
+                                    ),
+                                    onPressed: () => _showPlaylistOptions(
+                                      context,
+                                      name,
+                                      themeProvider,
+                                    ),
+                                  ),
                             onTap: () {
                               Navigator.of(context).push(
                                 PageRouteBuilder(
                                   opaque: false,
-                                  transitionDuration: const Duration(milliseconds: 300),
-                                  reverseTransitionDuration: const Duration(milliseconds: 300),
-                                  pageBuilder: (context, animation, secondaryAnimation) =>
-                                      PlaylistScreen(
-                                        name: name,
-                                      ),
-                                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                                    const begin = Offset(1.0, 0.0);
-                                    const end = Offset.zero;
-                                    const curve = Curves.easeInOutCubic;
+                                  transitionDuration: const Duration(
+                                    milliseconds: 300,
+                                  ),
+                                  reverseTransitionDuration: const Duration(
+                                    milliseconds: 300,
+                                  ),
+                                  pageBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                      ) => PlaylistScreen(name: name),
+                                  transitionsBuilder:
+                                      (
+                                        context,
+                                        animation,
+                                        secondaryAnimation,
+                                        child,
+                                      ) {
+                                        const begin = Offset(1.0, 0.0);
+                                        const end = Offset.zero;
+                                        const curve = Curves.easeInOutCubic;
 
-                                    var tween = Tween(begin: begin, end: end).chain(
-                                      CurveTween(curve: curve),
-                                    );
+                                        var tween = Tween(
+                                          begin: begin,
+                                          end: end,
+                                        ).chain(CurveTween(curve: curve));
 
-                                    return SlideTransition(
-                                      position: animation.drive(tween),
-                                      child: child,
-                                    );
-                                  },
+                                        return SlideTransition(
+                                          position: animation.drive(tween),
+                                          child: child,
+                                        );
+                                      },
                                 ),
                               );
                             },
@@ -343,13 +385,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
                     return _buildAnimatedListItem(
                       index: index,
+                      animate: animateListItems,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: GlassContainer(
                           child: ListTile(
-                            leading: Icon(themeProvider.useGlassTheme
-                                ? CupertinoIcons.time
-                                : Icons.history),
+                            leading: Icon(
+                              themeProvider.useGlassTheme
+                                  ? CupertinoIcons.time
+                                  : Icons.history,
+                            ),
                             title: Text(song['title']),
                             subtitle: Text(song['artist']),
                             onTap: () => player.playFromCache(song),

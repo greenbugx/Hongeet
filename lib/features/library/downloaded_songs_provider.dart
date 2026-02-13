@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import '../../core/utils/app_logger.dart';
 
 class DownloadedSong {
   final String path;
@@ -14,14 +15,10 @@ class DownloadedSongsProvider {
 
     if (!await dir.exists()) return [];
 
-    final files = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) {
+    final files = dir.listSync().whereType<File>().where((f) {
       final ext = p.extension(f.path).toLowerCase();
       return ['.mp3', '.m4a', '.webm'].contains(ext);
-    })
-        .toList();
+    }).toList();
 
     return files
         .map((f) => DownloadedSong(f.path, p.basenameWithoutExtension(f.path)))
@@ -35,7 +32,7 @@ class DownloadedSongsProvider {
         await file.delete();
       }
     } catch (e) {
-      print('Error deleting file: $e');
+      AppLogger.warning('Error deleting file: $e', error: e);
     }
   }
 }

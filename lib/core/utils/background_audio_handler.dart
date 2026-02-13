@@ -1,16 +1,19 @@
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'app_logger.dart';
 import 'audio_player_service.dart';
+import 'notification_art_cache.dart';
+import 'youtube_thumbnail_utils.dart';
 
 class BackgroundAudioHandler extends BaseAudioHandler
     with QueueHandler, SeekHandler {
-
   final AudioPlayerService _service = AudioPlayerService();
 
   StreamSubscription? _positionSub;
   StreamSubscription? _stateSub;
   StreamSubscription? _durationSub;
+  String _activeArtSeed = '';
 
   Duration? _latestDuration;
 
@@ -65,17 +68,83 @@ class BackgroundAudioHandler extends BaseAudioHandler
   void _listenNowPlaying() {
     _service.nowPlayingStream.listen((now) {
       if (now == null) return;
+      final artSeed = '${now.title}|${now.artist}|${now.imageUrl}';
+      _activeArtSeed = artSeed;
+      final artUri = _notificationArtUri(now.imageUrl);
 
       mediaItem.add(
         MediaItem(
           id: now.title,
           title: now.title,
           artist: now.artist,
-          artUri: now.imageUrl.isEmpty ? null : Uri.parse(now.imageUrl),
+          artUri: artUri,
           duration: _latestDuration,
         ),
       );
+
+      if (artUri != null) {
+        unawaited(_upgradeToSquareNotificationArt(artSeed, artUri.toString()));
+      }
     });
+  }
+
+  Future<void> _upgradeToSquareNotificationArt(
+    String artSeed,
+    String sourceUrl,
+  ) async {
+    try {
+      final squareUri = await NotificationArtCache.getSquareArtUri(sourceUrl);
+      if (squareUri == null) return;
+      if (artSeed != _activeArtSeed) return;
+
+      final current = mediaItem.value;
+      if (current == null) return;
+      if (current.artUri?.toString() == squareUri.toString()) return;
+
+      mediaItem.add(current.copyWith(artUri: squareUri));
+    } catch (e) {
+      AppLogger.warning('Failed to upgrade notification art: $e', error: e);
+    }
+  }
+
+  Uri? _notificationArtUri(String rawImageUrl) {
+    final imageUrl = rawImageUrl.trim();
+    if (imageUrl.isEmpty) return null;
+
+    final youtubeVideoId = YoutubeThumbnailUtils.videoIdFromUrl(imageUrl);
+    if (youtubeVideoId != null) {
+      final candidates = YoutubeThumbnailUtils.candidateUrls(
+        imageUrl: imageUrl,
+      );
+
+      String pickByToken(String token) {
+        for (final url in candidates) {
+          if (url.contains(token)) return url;
+        }
+        return '';
+      }
+
+      final maxRes = pickByToken('/maxresdefault.jpg');
+      final sdDefault = pickByToken('/sddefault.jpg');
+      final hq720 = pickByToken('/hq720.jpg');
+      final hqDefault = pickByToken('/hqdefault.jpg');
+
+      final preferred = maxRes.isNotEmpty
+          ? maxRes
+          : sdDefault.isNotEmpty
+          ? sdDefault
+          : hq720.isNotEmpty
+          ? hq720
+          : hqDefault.isNotEmpty
+          ? hqDefault
+          : candidates.isNotEmpty
+          ? candidates.first
+          : imageUrl;
+
+      return Uri.tryParse(preferred) ?? Uri.tryParse(imageUrl);
+    }
+
+    return Uri.tryParse(imageUrl);
   }
 
   AudioProcessingState _mapState(ProcessingState s) {

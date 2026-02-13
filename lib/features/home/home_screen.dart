@@ -27,6 +27,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final tabs = <Widget>[
+      SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
+      const LibraryScreen(),
+      SettingsScreen(onMusicServiceChanged: _onMusicServiceChanged),
+    ];
 
     return Scaffold(
       extendBody: true,
@@ -35,11 +40,12 @@ class _HomeScreenState extends State<HomeScreen> {
           // Main screen
           IndexedStack(
             index: _index,
-            children: [
-              SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
-              const LibraryScreen(),
-              SettingsScreen(onMusicServiceChanged: _onMusicServiceChanged),
-            ],
+            children: List<Widget>.generate(
+              tabs.length,
+              (i) => RepaintBoundary(
+                child: TickerMode(enabled: i == _index, child: tabs[i]),
+              ),
+            ),
           ),
 
           const Positioned(left: 0, right: 0, bottom: 88, child: MiniPlayer()),
@@ -57,7 +63,10 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.transparent,
               elevation: 0,
               currentIndex: _index,
-              onTap: (i) => setState(() => _index = i),
+              onTap: (i) {
+                if (i == _index) return;
+                setState(() => _index = i);
+              },
               items: [
                 BottomNavigationBarItem(
                   icon: Icon(
