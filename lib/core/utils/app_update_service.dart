@@ -102,7 +102,7 @@ Future<void> showUpdateDialog(
 
   await showDialog<void>(
     context: context,
-    barrierDismissible: !result.requiresUpdate,
+    barrierDismissible: true,
     builder: (dialogContext) {
       final notesText = result.notes.isEmpty
           ? 'New fixes and improvements.'
@@ -116,11 +116,10 @@ Future<void> showUpdateDialog(
           '$notesText',
         ),
         actions: [
-          if (!result.requiresUpdate)
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Later'),
-            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Ignore'),
+          ),
           FilledButton(
             onPressed: () async {
               final opened = await service.openUpdateUrl(result.apkUrl);
@@ -134,7 +133,7 @@ Future<void> showUpdateDialog(
                 Navigator.of(dialogContext).pop();
               }
             },
-            child: const Text('Update Now'),
+            child: const Text('Update'),
           ),
         ],
       );

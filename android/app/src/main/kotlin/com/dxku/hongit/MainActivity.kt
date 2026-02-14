@@ -9,7 +9,6 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import com.dxku.hongit.backend.MainService
-import com.dxku.hongit.backend.youtube.YoutubeExtractorBridge
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,7 +16,6 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : AudioServiceActivity() {
 
     private val batteryChannel = "battery_optimization"
-    private val youtubeBridge by lazy { YoutubeExtractorBridge(applicationContext) }
 
     companion object {
         private const val TAG = "MainActivity"
@@ -48,13 +46,10 @@ class MainActivity : AudioServiceActivity() {
                 else -> result.notImplemented()
             }
         }
-
-        youtubeBridge.attach(flutterEngine.dartExecutor.binaryMessenger)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        youtubeBridge.initialize()
         MainService.start(this)
     }
 
@@ -167,4 +162,3 @@ class MainActivity : AudioServiceActivity() {
         }
     }
 }
-

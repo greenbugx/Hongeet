@@ -60,6 +60,20 @@ class YoutubeApi {
       ytmError = e;
     }
 
+    // Secondary YTM pass without fixed songs params so still prefer YTM before falling back to generic YouTube search.
+    if (ytmSongs.isEmpty) {
+      try {
+        ytmSongs = await _searchViaYtm(
+          query: normalized,
+          take: safeTake,
+          useSongsParams: false,
+          requireSongsShelf: false,
+        );
+      } catch (e) {
+        ytmError ??= e;
+      }
+    }
+
     List<SaavnSong> fallbackSongs = const [];
     if (ytmSongs.isEmpty) {
       try {
@@ -90,6 +104,8 @@ class YoutubeApi {
   static Future<List<SaavnSong>> _searchViaYtm({
     required String query,
     required int take,
+    bool useSongsParams = true,
+    bool requireSongsShelf = true,
   }) async {
     final bootstrap = await _getYtmBootstrap();
     final out = <SaavnSong>[];
@@ -98,13 +114,18 @@ class YoutubeApi {
     Map<String, dynamic>? payload = await _postYtmSearch(
       bootstrap: bootstrap,
       query: query,
+      useSongsParams: useSongsParams,
       timeout: _ytmSearchTimeout,
     );
     var continuation = '';
     var pageIndex = 0;
 
     while (payload != null && out.length < take && pageIndex < _maxYtmPages) {
-      final page = _extractYtmSongsPage(payload, initialPage: pageIndex == 0);
+      final page = _extractYtmSongsPage(
+        payload,
+        initialPage: pageIndex == 0,
+        requireSongsShelf: requireSongsShelf,
+      );
       for (final song in page.songs) {
         if (!seen.add(song.id)) continue;
         out.add(song);
@@ -118,6 +139,7 @@ class YoutubeApi {
         bootstrap: bootstrap,
         query: query,
         continuation: continuation,
+        useSongsParams: useSongsParams,
         timeout: _ytmContinuationTimeout,
       );
       pageIndex++;
@@ -130,6 +152,7 @@ class YoutubeApi {
     required _YtmBootstrapCache bootstrap,
     required String query,
     String? continuation,
+    required bool useSongsParams,
     required Duration timeout,
   }) async {
     final apiKey = bootstrap.apiKey.isNotEmpty
@@ -158,9 +181,11 @@ class YoutubeApi {
     };
     if (continuation != null && continuation.isNotEmpty) {
       body['continuation'] = continuation;
-    } else {
+    } else if (useSongsParams) {
       body['query'] = query;
       body['params'] = _ytmSongsParams;
+    } else {
+      body['query'] = query;
     }
 
     final headers = <String, String>{
@@ -195,6 +220,7 @@ class YoutubeApi {
   static _YtmSongsPage _extractYtmSongsPage(
     Map<String, dynamic> payload, {
     required bool initialPage,
+    required bool requireSongsShelf,
   }) {
     if (!initialPage) {
       final continuationContents = _asMap(payload['continuationContents']);
@@ -248,7 +274,9 @@ class YoutubeApi {
         songsShelf = shelf;
         break;
       }
-      songsShelf ??= shelf;
+      if (!requireSongsShelf) {
+        songsShelf ??= shelf;
+      }
     }
 
     if (songsShelf == null) {
@@ -735,26 +763,42 @@ class YoutubeApi {
     var related = await _yt.videos.getRelatedVideos(video).timeout(timeout);
     if (related == null || related.isEmpty) return const [];
 
-    final out = <SaavnSong>[];
-    final seen = <String>{};
+    final strict = <SaavnSong>[];
+    final strictSeen = <String>{};
+    final relaxed = <SaavnSong>[];
+    final relaxedSeen = <String>{};
     RelatedVideosList? current = related;
     var pageGuard = 0;
 
-    while (current != null && out.length < take && pageGuard < 3) {
+    while (current != null && strict.length < take && pageGuard < 3) {
       final page = current;
       for (final item in page) {
-        final mapped = _mapVideoToSong(item, query: '', strictMode: false);
-        if (mapped == null) continue;
-        if (!seen.add(mapped.id)) continue;
-        out.add(mapped);
-        if (out.length >= take) break;
+        final strictMapped = _mapVideoToSong(item, query: '', strictMode: true);
+        if (strictMapped != null) {
+          if (strictSeen.add(strictMapped.id)) {
+            strict.add(strictMapped);
+          }
+          if (strict.length >= take) break;
+          continue;
+        }
+
+        final relaxedMapped = _mapVideoToSong(
+          item,
+          query: '',
+          strictMode: false,
+        );
+        if (relaxedMapped == null) continue;
+        if (strictSeen.contains(relaxedMapped.id)) continue;
+        if (relaxedSeen.add(relaxedMapped.id)) {
+          relaxed.add(relaxedMapped);
+        }
       }
-      if (out.length >= take) break;
+      if (strict.length >= take) break;
       current = await page.nextPage().timeout(timeout);
       pageGuard++;
     }
 
-    return out;
+    return _mergeWithDedup(strict, relaxed, take);
   }
 
   static Future<List<Video>> _collectSearchVideos({

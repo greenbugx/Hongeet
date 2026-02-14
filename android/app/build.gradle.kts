@@ -92,16 +92,9 @@ android {
     }
 }
 
-val youtubedlAndroid = "0.18.1"
-
-//repositories {
-//    mavenCentral()
-//}
-
 dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.github.junkfood02.youtubedl-android:library:${youtubedlAndroid}")
 }
 
 flutter {
