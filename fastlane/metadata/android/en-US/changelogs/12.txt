@@ -1,0 +1,5 @@
+v1.3.2+12
+- Migrated YouTube stream extraction to pure Dart (youtube_explode_dart).
+- Improved background playback transition reliability for next-track loading.
+- Added startup update prompt for outdated versions with Ignore and Update actions.
+- Tuned songs-first YouTube Music search and related-result behavior.
