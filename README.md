@@ -135,8 +135,6 @@ HONGEET only asks for permissions needed for playback, downloads, and local medi
 
 HONGEET does not request contacts, location, microphone, or camera permissions.
 
-<hr>
-
 ---
 
 <h2 align=center> 🤝 Contributing </h2>
@@ -157,7 +155,7 @@ You can help by:
 - Commit clean, meaningful changes
 - Open a Pull Request
 
-_For detailed info about Contributing to this project, please check [CONTRIBUTING](CONTRIBUTING.md)
+_For detailed info about Contributing to this project, please check [CONTRIBUTING](CONTRIBUTING.md)_
 
 ---
 
