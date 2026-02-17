@@ -49,6 +49,7 @@ app.*.map.json
 # Flutter/Dart
 .flutter-plugins
 .packages
+.pubspec.lock
 
 # Android
 android/.gradle/
