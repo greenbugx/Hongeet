@@ -9,7 +9,7 @@ jobs:
     name: Build and Release
     runs-on: ubuntu-latest
     env:
-      BUILD_OFFSET: 11
+      BUILD_OFFSET: 10
 
     steps:
       - name: Checkout Repository
