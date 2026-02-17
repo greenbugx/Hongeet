@@ -32,7 +32,8 @@
 
 <h1 align=center> 📖 What is HONGEET? </h1>
 
-**HONGEET** was built to solve a simple problem: *“Why is it so hard to just listen to music the way **I** want?”*
+**HONGEET** was built to solve a simple problem:<br> 
+> *“Why is it so hard to just listen to music the way **I** want?”*
 
 Most modern music apps lock downloads behind paywalls, track your data aggressively, or break completely when you go offline. **HONGEET does the opposite.**
 
