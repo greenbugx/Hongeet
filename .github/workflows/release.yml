@@ -9,7 +9,7 @@ jobs:
     name: Build and Release
     runs-on: ubuntu-latest
     env:
-      BUILD_OFFSET: 13
+      BUILD_OFFSET: 12
 
     steps:
       - name: Checkout Repository
@@ -46,7 +46,7 @@ jobs:
 
       - name: Create Keystore properties file
         run: |
-          echo storeFile=./android/hongeet.jks > android/key.properties
+          echo storeFile=../hongeet.jks > android/key.properties
           echo keyPassword=${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }} >> android/key.properties
           echo storePassword=${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }} >> android/key.properties
           echo keyAlias=${{ secrets.ANDROID_KEY_ALIAS }} >> android/key.properties
@@ -82,14 +82,14 @@ jobs:
             build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_armeabi-v7a.apk
             build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_arm64-v8a.apk
       
-      - name: Create GitHub Release
-        uses: ncipollo/release-action@v1
-        with:
-          artifacts: |
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_universal.apk
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_armeabi-v7a.apk
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_arm64-v8a.apk
+      # - name: Create GitHub Release
+      #   uses: ncipollo/release-action@v1
+      #   with:
+      #     artifacts: |
+      #       build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_universal.apk
+      #       build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_armeabi-v7a.apk
+      #       build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_arm64-v8a.apk
 
-          tag: v${VERSION}+${BUILD_NUMBER}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: false
+      #     tag: v${VERSION}+${BUILD_NUMBER}
+      #     token: ${{ secrets.GITHUB_TOKEN }}
+      #     prerelease: false
