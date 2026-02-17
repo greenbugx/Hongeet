@@ -16,7 +16,7 @@ on:
 jobs:
   build:
     name: Build and Check
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
@@ -38,24 +38,20 @@ jobs:
         run: flutter pub get
 
       - name: Extract version from pubspec.yaml
-        shell: powershell
         run: |
-            $vLine = Select-String -Path pubspec.yaml -Pattern '^version:\s*(\S+)' | Select-Object -First 1
-            if (-not $vLine) { Write-Error 'version not found in pubspec.yaml'; exit 1 }
-            $ver = $vLine.Matches[0].Groups[1].Value.Split('+')[0]
-            echo "VERSION=$ver" >> $env:GITHUB_ENV
+            VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Build APK
         run: flutter build apk --release --build-number ${{github.run_number}}
 
       - name: Rename APK
-        shell: powershell
         run: |
-            Rename-Item -Path "build/app/outputs/flutter-apk/app-release.apk" -NewName "Hongeet_v$env:VERSION+${{github.run_number}}.apk"
+            mv build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/flutter-apk/Hongeet_v${VERSION}+${{ github.run_number }}.apk
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Hongeet Release
-          path: |
-              build/app/outputs/flutter-apk/Hongeet_v${{env.VERSION}}+${{github.run_number}}.apk
+          path: build/app/outputs/flutter-apk/Hongeet_v${{env.VERSION}}+${{github.run_number}}.apk
