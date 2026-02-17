@@ -4,7 +4,8 @@
 
   # HONGEET - সংগীত 🎧
 
-  **A lightweight, local-first music streaming & offline player.** *Built with love for speed, control, and clean design.*
+  **A lightweight, local-first music streaming & offline player.**<br>
+  *Built with love for speed, control, and clean design.*
 
   <p>
     <a href="https://flutter.dev">
