@@ -49,7 +49,7 @@ app.*.map.json
 # Flutter/Dart
 .flutter-plugins
 .packages
-.pubspec.lock
+pubspec.lock
 
 # Android
 android/.gradle/
