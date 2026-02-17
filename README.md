@@ -25,7 +25,7 @@
 ---
 
 > [!IMPORTANT]
-> **Active Development:** Hongeet is currently in beta. Expect bugs, crashes, or missing features.  
+> **Active Development:** Hongeet is currently in active development. Expect bugs, crashes, or missing features.  
 > If you encounter issues, please report them in the [Issues Tab](https://github.com/greenbugx/Hongeet/issues).
 
 ---
