@@ -78,9 +78,9 @@ jobs:
         with:
           name: Release
           path: |
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_universal.apk
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_armeabi-v7a.apk
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_arm64-v8a.apk
+            build/app/outputs/flutter-apk/hongeet_v*_universal.apk
+            build/app/outputs/flutter-apk/hongeet_v*_armeabi-v7a.apk
+            build/app/outputs/flutter-apk/hongeet_v*_arm64-v8a.apk
       
       # - name: Create GitHub Release
       #   uses: ncipollo/release-action@v1
