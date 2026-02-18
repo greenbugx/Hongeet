@@ -8,8 +8,8 @@ jobs:
   build:
     name: Build and Release
     runs-on: ubuntu-latest
-    env:
-      BUILD_OFFSET: 10
+    # env:
+    #   BUILD_OFFSET: 10
 
     steps:
       - name: Checkout Repository
@@ -35,10 +35,10 @@ jobs:
           VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Compute build number
-        run: |
-          BUILD_NUMBER=$((BUILD_OFFSET + GITHUB_RUN_NUMBER))
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+      # - name: Compute build number
+      #   run: |
+      #     BUILD_NUMBER=$((BUILD_OFFSET + GITHUB_RUN_NUMBER))
+      #     echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
       - name: Create keystore file
         run: |
@@ -52,10 +52,10 @@ jobs:
           echo keyAlias=${{ secrets.ANDROID_KEY_ALIAS }} >> android/key.properties
 
       - name: Build Universal APK
-        run: flutter build apk --release --build-number $BUILD_NUMBER
+        run: flutter build apk --release
 
       - name: Build ARM Split APKs
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64,android-arm --build-number $BUILD_NUMBER
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64,android-arm
 
       - name: Verify Sign
         run: |
@@ -67,11 +67,11 @@ jobs:
       - name: Rename APK files
         run: |
           mv build/app/outputs/flutter-apk/app-release.apk \
-             build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_universal.apk
+             build/app/outputs/flutter-apk/hongeet_v${VERSION}_universal.apk
           mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
-             build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_armeabi-v7a.apk
+             build/app/outputs/flutter-apk/hongeet_v${VERSION}_armeabi-v7a.apk
           mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-             build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_arm64-v8a.apk
+             build/app/outputs/flutter-apk/hongeet_v${VERSION}_arm64-v8a.apk
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -86,10 +86,10 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: |
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_universal.apk
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_armeabi-v7a.apk
-            build/app/outputs/flutter-apk/hongeet_v${VERSION}+${BUILD_NUMBER}_arm64-v8a.apk
+            build/app/outputs/flutter-apk/hongeet_v${VERSION}_universal.apk
+            build/app/outputs/flutter-apk/hongeet_v${VERSION}_armeabi-v7a.apk
+            build/app/outputs/flutter-apk/hongeet_v${VERSION}_arm64-v8a.apk
 
-          tag: v${VERSION}+${BUILD_NUMBER}
+          tag: v${VERSION}
           token: ${{ secrets.GITHUB_TOKEN }}
           prerelease: false
