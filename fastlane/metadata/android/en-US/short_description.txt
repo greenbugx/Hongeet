@@ -1,1 +1,1 @@
-Ad-free local-first music streaming and downloads
+Offline music player with optional YouTube Music & JioSaavn streaming with NO Ads
