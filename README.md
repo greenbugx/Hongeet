@@ -4,7 +4,7 @@
 
   # HONGEET - সংগীত 🎧
 
-  **A lightweight, local-first music streaming & offline player.**<br>
+  **A lightweight music player with offline playback and optional third-party streaming.**<br>
   *Built with love for speed, control, and clean design.*
 
   <p>
@@ -38,12 +38,12 @@
 
 Most modern music apps lock downloads behind paywalls, track your data aggressively, or break completely when you go offline. **HONGEET does the opposite.**
 
-It is a **local-backend** app that streams directly from the source and lets **you** decide what happens to your music.
+Hongeet is a music player that supports **offline local audio playback** and **optional streaming from third-party services such as YouTube Music and JioSaavn** — giving you full control over how and where you listen.
 
 ### ✨ Key Highlights
 | 🎶 Streaming | 📥 Downloads |
 | :--- | :--- |
-| • High-quality audio streaming<br>• Smart URL caching (fast repeats)<br>• Gapless playback & Queue management | • Download directly to device storage<br>• YT Extraction (via `youtube_explode_dart`)<br>• Fully offline playback |
+| • High-quality audio streaming from supported services<br>• Smart URL caching (fast repeats)<br>• Gapless playback & Queue management | • Download directly to device storage<br>• YT Extraction (via `youtube_explode_dart`)<br>• Fully offline playback |
 
 | 🧠 Smart Playback | 🖤 UI / UX |
 | :--- | :--- |
@@ -76,13 +76,13 @@ HONGEET asks for permissions strictly needed for playback, downloads, and local 
 
 | Permission | Reason |
 | :--- | :--- |
-| `INTERNET` | For streaming audio and fetching music metadata. |
+| `INTERNET` | For streaming audio, metadata fetching, and optional update checks. |
 | `POST_NOTIFICATIONS` <br>*(Android 13+)* | For playback controls in notification/lock screen and download notifications. |
 | `FOREGROUND_SERVICE`<br>`FOREGROUND_SERVICE_MEDIA_PLAYBACK`<br>`WAKE_LOCK` | To keep background playback stable while the app is minimized or the screen is locked. |
 | `FOREGROUND_SERVICE_DATA_SYNC` | To support background data tasks such as download/stream sync operations. |
 | `READ_MEDIA_AUDIO`<br>*(Android 13+)* | To read audio files from device storage (downloads/local tracks). |
 | `READ_EXTERNAL_STORAGE`<br>*(Android 12 and below)* | Backward-compatible local audio access on older Android versions. |
-| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | **Optional:** Used to open battery optimization settings on aggressive OEM devices. This is user-controlled and only requested to improve background playback reliability. |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | **Optional:** Used to open battery optimization settings on aggressive OEM devices. |
 
 > [!NOTE]
 > HONGEET **does not** request contacts, location, microphone, or camera permissions.
@@ -106,8 +106,8 @@ _For detailed info, please check [CONTRIBUTING.md](CONTRIBUTING.md)_
 
 This project wouldn’t exist without these amazing open-source libraries:
 
-* **[youtube_explode_dart](https://github.com/Hexer10/youtube_explode_dart):** For pure Dart YouTube stream extraction.
-* **[JioSaavn API (Unofficial)](https://github.com/sumitkolhe/jiosaavn-api):** For metadata & streaming access.
+* **youtube_explode_dart** — YouTube stream extraction in pure Dart  
+* **JioSaavn API (Unofficial)** — metadata & streaming access from JioSaavn
 
 ---
 
