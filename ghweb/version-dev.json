@@ -1,6 +1,6 @@
 {
-  "latest": "v1.3.3+13",
-  "min_supported": "v1.3.2+12",
+  "latest": "v1.4.0+14",
+  "min_supported": "v1.3.3+13",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
-  "notes": "Download fixes: backend now waits for the full file before returning, so 'Download complete' and the saved file are in sync; larger transfer buffer and throttled progress updates for faster downloads; clearer toasts (Downloading → Download complete). Added Quick Access in library for simplicity."
+  "notes": "TEST"
 }
