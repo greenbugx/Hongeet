@@ -83,6 +83,7 @@ HONGEET asks for permissions strictly needed for playback, downloads, and local 
 | `READ_MEDIA_AUDIO`<br>*(Android 13+)* | To read audio files from device storage (downloads/local tracks). |
 | `READ_EXTERNAL_STORAGE`<br>*(Android 12 and below)* | Backward-compatible local audio access on older Android versions. |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | **Optional:** Used to open battery optimization settings on aggressive OEM devices. |
+| `MANAGE_EXTERNAL_STORAGE`<br>*(Android 11+)* | **Optional:** Used only if the user opts in to manage local audio files directly from the app. |
 
 > [!NOTE]
 > HONGEET **does not** request contacts, location, microphone, or camera permissions.
