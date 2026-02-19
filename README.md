@@ -18,7 +18,7 @@
   [![Downloads](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white)](https://sourceforge.net/projects/hongeet/)
 
   <a href="https://sourceforge.net/projects/hongeet/files/latest/download">
-    <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width=200 srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
+    <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width=300 srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
   </a>
 
 </div>
