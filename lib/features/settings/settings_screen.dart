@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/glass_container.dart';
+import '../../core/utils/streaming_preferences.dart';
 import '../../core/utils/glass_page.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/app_update_service.dart';
@@ -25,7 +26,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool showBatteryWarning = false;
   String manufacturer = '';
 
-  bool _useYoutubeService = true;
+  bool _useYoutubeService = false;
+  bool _useSaavnService = false;
 
   static const _remindAfterDays = 5;
   static const _lastPromptKey = 'battery_prompt_time';
@@ -106,18 +108,51 @@ class _SettingsScreenState extends State<SettingsScreen>
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _useYoutubeService = prefs.getBool('use_youtube_service') ?? true;
+      _useYoutubeService = prefs.getBool('use_youtube_service') ?? false;
+      _useSaavnService = prefs.getBool('use_saavn_service') ?? false;
     });
   }
 
-  Future<void> _setMusicServicePreference(bool useYoutube) async {
+  Future<void> _setYoutubeServicePreference(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('use_youtube_service', useYoutube);
+    // When enabling YouTube, ensure Saavn is disabled to keep services mutually exclusive.
+    await prefs.setBool('use_youtube_service', enabled);
+    if (enabled) {
+      await prefs.setBool('use_saavn_service', false);
+      // If in local mode and enabling YouTube, switch to YTM mode
+      final currentMode = prefs.getString('app_mode');
+      if (currentMode == 'local') {
+        await prefs.setString('app_mode', 'ytm');
+      }
+    }
     if (!mounted) return;
     setState(() {
-      _useYoutubeService = useYoutube;
+      _useYoutubeService = enabled;
+      if (enabled) _useSaavnService = false;
     });
-    widget.onMusicServiceChanged?.call(useYoutube);
+    await StreamingPreferences.reload();
+    widget.onMusicServiceChanged?.call(enabled);
+  }
+
+  Future<void> _setSaavnServicePreference(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    // When enabling Saavn, ensure YTM is disabled to keep services mutually exclusive
+    await prefs.setBool('use_saavn_service', enabled);
+    if (enabled) {
+      await prefs.setBool('use_youtube_service', false);
+      // If in local mode and enabling Saavn, switch to Saavn mode
+      final currentMode = prefs.getString('app_mode');
+      if (currentMode == 'local') {
+        await prefs.setString('app_mode', 'saavn');
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _useSaavnService = enabled;
+      if (enabled) _useYoutubeService = false;
+    });
+    await StreamingPreferences.reload();
+    widget.onMusicServiceChanged?.call(enabled);
   }
 
   void _showBatteryPopup(String m) {
@@ -421,9 +456,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           GlassContainer(
             child: SwitchListTile(
-              value: !_useYoutubeService,
+              value: _useSaavnService,
               onChanged: (v) {
-                if (v) _setMusicServicePreference(false);
+                _setSaavnServicePreference(v);
               },
               secondary: Icon(
                 themeProvider.useGlassTheme
@@ -441,7 +476,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             child: SwitchListTile(
               value: _useYoutubeService,
               onChanged: (v) {
-                if (v) _setMusicServicePreference(true);
+                _setYoutubeServicePreference(v);
               },
               secondary: Icon(
                 themeProvider.useGlassTheme

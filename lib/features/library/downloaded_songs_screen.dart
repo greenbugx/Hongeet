@@ -186,7 +186,9 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
                     }
 
                     return Column(
-                      children: songs.map((song) {
+                      children: songs.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final song = entry.value;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: GlassContainer(
@@ -198,7 +200,14 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
                               ),
                               title: _buildSongTitle(song.name),
                               onTap: () {
-                                player.playLocalFile(song.path, song.name);
+                                // Build queue from all downloaded songs, starting at clicked song
+                                player.playLocalFiles(
+                                  files: songs.map((s) => (
+                                    path: s.path,
+                                    name: s.name,
+                                  )).toList(),
+                                  startIndex: index,
+                                );
                                 AppMessenger.show('Playing ${song.name}');
                               },
                               trailing: IconButton(

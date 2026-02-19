@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/utils/app_update_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../library/library_screen.dart';
 import '../search/search_screen.dart';
@@ -18,33 +18,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   int _searchScreenVersion = 0;
-  bool _didRunStartupUpdateCheck = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _runStartupUpdateCheck();
-    });
-  }
 
   void _onMusicServiceChanged(bool _) {
     setState(() {
       _searchScreenVersion++;
     });
-  }
-
-  Future<void> _runStartupUpdateCheck() async {
-    if (_didRunStartupUpdateCheck || !mounted) return;
-    _didRunStartupUpdateCheck = true;
-
-    try {
-      final result = await AppUpdateService().checkForUpdates();
-      if (!mounted || !result.hasUpdate) return;
-      await showUpdateDialog(context, result);
-    } catch (_) {
-      // startup should never be blocked by update checks.
-    }
   }
 
   @override
@@ -58,79 +36,130 @@ class _HomeScreenState extends State<HomeScreen> {
         navBottomPadding +
         miniGapAboveNav +
         bottomInset;
-    final tabs = <Widget>[
-      SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
-      const LibraryScreen(),
-      SettingsScreen(onMusicServiceChanged: _onMusicServiceChanged),
-    ];
 
-    return Scaffold(
-      extendBody: true,
-      body: Stack(
-        children: [
-          // Main screen
-          IndexedStack(
-            index: _index,
-            children: List<Widget>.generate(
-              tabs.length,
-              (i) => RepaintBoundary(
-                child: TickerMode(enabled: i == _index, child: tabs[i]),
+    return FutureBuilder<Map<String, bool>>(
+      future: SharedPreferences.getInstance().then(
+        (prefs) => {
+          'use_youtube_service': prefs.getBool('use_youtube_service') ?? false,
+          'use_saavn_service': prefs.getBool('use_saavn_service') ?? false,
+        },
+      ),
+      builder: (context, snapshot) {
+        final useYoutube = snapshot.data?['use_youtube_service'] ?? false;
+        final useSaavn = snapshot.data?['use_saavn_service'] ?? false;
+        final isLocalMode = !useYoutube && !useSaavn;
+
+        final tabs = <Widget>[
+          SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
+          // Keep a placeholder in place of Library when in local-only mode so the tab indices remain stable and we don't force navigation
+          isLocalMode
+              ? const _DisabledLibraryPlaceholder()
+              : const LibraryScreen(),
+          SettingsScreen(onMusicServiceChanged: _onMusicServiceChanged),
+        ];
+
+        int displayIndex = _index;
+        if (displayIndex >= tabs.length) displayIndex = 0;
+
+        return Scaffold(
+          extendBody: true,
+          body: Stack(
+            children: [
+              IndexedStack(
+                index: displayIndex,
+                children: List<Widget>.generate(
+                  tabs.length,
+                  (i) => RepaintBoundary(
+                    child: TickerMode(
+                      enabled: i == displayIndex,
+                      child: tabs[i],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: miniPlayerBottom,
+                child: const MiniPlayer(),
+              ),
+            ],
+          ),
+          bottomNavigationBar: Padding(
+            padding: EdgeInsets.fromLTRB(
+              12,
+              0,
+              12,
+              navBottomPadding + bottomInset,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.08),
+                child: BottomNavigationBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  currentIndex: displayIndex,
+                  onTap: (i) {
+                    if (i == displayIndex) return;
+                    setState(() => _index = i);
+                  },
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.search
+                            : Icons.search,
+                      ),
+                      label: 'Search',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.music_albums
+                            : Icons.library_music,
+                        color: isLocalMode ? Colors.white24 : null,
+                      ),
+                      label: 'Library',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.settings
+                            : Icons.settings,
+                      ),
+                      label: 'Settings',
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
 
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: miniPlayerBottom,
-            child: const MiniPlayer(),
-          ),
-        ],
-      ),
+class _DisabledLibraryPlaceholder extends StatelessWidget {
+  const _DisabledLibraryPlaceholder();
 
-      // Bottom Navigation
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(12, 0, 12, navBottomPadding + bottomInset),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            color: Colors.white.withValues(alpha: 0.08),
-            child: BottomNavigationBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              currentIndex: _index,
-              onTap: (i) {
-                if (i == _index) return;
-                setState(() => _index = i);
-              },
-              items: [
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.search
-                        : Icons.search,
-                  ),
-                  label: 'Search',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.music_albums
-                        : Icons.library_music,
-                  ),
-                  label: 'Library',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.settings
-                        : Icons.settings,
-                  ),
-                  label: 'Settings',
-                ),
-              ],
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            Icon(Icons.library_music, size: 56, color: Colors.white38),
+            SizedBox(height: 12),
+            Text(
+              'Library is disabled in Local-only mode',
+              style: TextStyle(color: Colors.white54),
+              textAlign: TextAlign.center,
             ),
-          ),
+          ],
         ),
       ),
     );

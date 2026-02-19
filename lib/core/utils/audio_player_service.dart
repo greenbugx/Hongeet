@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'app_messenger.dart';
 import 'app_logger.dart';
 import 'data_saver_settings.dart';
+import 'streaming_preferences.dart';
 import '../../data/api/saavn_song_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../data/api/youtube_api.dart';
@@ -62,6 +64,12 @@ class AudioPlayerService {
   final _currentIndexSubject = BehaviorSubject<int?>.seeded(null);
   Stream<int?> get currentIndexStream => _currentIndexSubject.stream;
   int? get currentIndex => _currentIndexSubject.value;
+
+  final _queueVersion = BehaviorSubject<int>.seeded(0);
+  Stream<int> get queueChangeStream => _queueVersion.stream;
+  void _notifyQueueChanged() {
+    if (!_queueVersion.isClosed) _queueVersion.add(_queueVersion.value + 1);
+  }
 
   final _trackLoading = BehaviorSubject<bool>.seeded(false);
   Stream<bool> get trackLoadingStream => _trackLoading.stream;
@@ -126,12 +134,22 @@ class AudioPlayerService {
       final Map<String, String> headers;
 
       if (isYoutube) {
+        final prefs = await SharedPreferences.getInstance();
+        final useYoutube = prefs.getBool('use_youtube_service') ?? true;
+        if (!useYoutube) {
+          throw StateError('YouTube streaming disabled by user');
+        }
         final videoId = id.substring(3);
         AppLogger.info('Using YouTube service for playback: $videoId');
         final extracted = await YoutubeSongApi.fetchBestStream(videoId);
         url = extracted.url;
         headers = extracted.headers;
       } else {
+        final prefs = await SharedPreferences.getInstance();
+        final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+        if (!useSaavn) {
+          throw StateError('Saavn streaming disabled by user');
+        }
         AppLogger.info('Using Saavn service for playback: $id');
         url = await SaavnSongApi.fetchBestStreamUrl(id);
         headers = const {};
@@ -482,6 +500,7 @@ class AudioPlayerService {
 
     _queue = List.unmodifiable(songs);
     _prefetchedForIndex = null;
+    _notifyQueueChanged();
 
     await _loadAndPlaySong(safeIndex, token);
   }
@@ -513,6 +532,7 @@ class AudioPlayerService {
 
     _queue = List.unmodifiable([song]);
     _prefetchedForIndex = null;
+    _notifyQueueChanged();
 
     await _loadAndPlaySong(0, token);
   }
@@ -524,6 +544,27 @@ class AudioPlayerService {
       meta: NowPlaying(title: name, artist: 'Offline', imageUrl: ''),
     );
     await playNow(song);
+  }
+
+  /// Play a list of local files, starting at the specified index
+  Future<void> playLocalFiles({
+    required List<({String path, String name})> files,
+    required int startIndex,
+  }) async {
+    if (files.isEmpty) {
+      AppLogger.warning('Cannot play from empty local files list');
+      return;
+    }
+
+    final queued = files.map((file) {
+      return QueuedSong(
+        id: file.path,
+        isLocal: true,
+        meta: NowPlaying(title: file.name, artist: 'Offline', imageUrl: ''),
+      );
+    }).toList();
+
+    await playFromList(songs: queued, startIndex: startIndex);
   }
 
   Future<void> playFromCache(Map<String, dynamic> song) async {
@@ -605,6 +646,10 @@ class AudioPlayerService {
     final current = _queue[_currentIndex];
     if (!current.id.startsWith('yt:')) return;
 
+    // Only fetch suggestions when streaming (YTM) is enabled
+    await StreamingPreferences.load();
+    if (!StreamingPreferences.useYoutube) return;
+
     final remaining = _queue.length - _currentIndex - 1;
     if (remaining > 5) return;
 
@@ -632,6 +677,7 @@ class AudioPlayerService {
       if (additions.isEmpty) return;
 
       _queue = List<QueuedSong>.from(_queue)..addAll(additions);
+      _notifyQueueChanged();
       AppLogger.info(
         'Added ${additions.length} YouTube recommendations to the queue',
       );
@@ -712,9 +758,65 @@ class AudioPlayerService {
     _recentlyPlayedSubject.add([]);
   }
 
+  /// Remove a song from the queue by its ID
+  /// Returns true if the song was found and removed, false otherwise
+  Future<bool> removeSongFromQueue(String songId) async {
+    final indexToRemove = _queue.indexWhere((song) => song.id == songId);
+    if (indexToRemove == -1) return false;
+
+    final wasCurrentSong = indexToRemove == _currentIndex;
+    final newQueue = List<QueuedSong>.from(_queue);
+    newQueue.removeAt(indexToRemove);
+
+    if (newQueue.isEmpty) {
+      await stopAndClearNowPlaying();
+      return true;
+    }
+
+    // Update the queue
+    _queue = List.unmodifiable(newQueue);
+    _prefetchedForIndex = null;
+    _notifyQueueChanged();
+
+    // Update current index if needed
+    int newIndex = _currentIndex;
+    if (wasCurrentSong) {
+      if (newIndex >= newQueue.length) {
+        newIndex = newQueue.length - 1;
+      }
+      // Stop current playback
+      ++_playToken;
+      await _player.stop();
+      _trackLoading.add(false);
+
+      // Play the new current song
+      if (newIndex >= 0 && newIndex < newQueue.length) {
+        _currentIndex = newIndex;
+        _currentIndexSubject.add(newIndex);
+        final token = ++_playToken;
+        await _loadAndPlaySong(newIndex, token);
+      } else {
+        _currentIndex = 0;
+        _currentIndexSubject.add(null);
+        _nowPlaying.add(null);
+      }
+    } else {
+      if (indexToRemove < _currentIndex) {
+        newIndex = _currentIndex - 1;
+        _currentIndex = newIndex;
+        _currentIndexSubject.add(newIndex);
+      }
+      // Always notify so UI rebuilds 'Up Next'
+      _notifyQueueChanged();
+    }
+
+    return true;
+  }
+
   Future<void> stopAndClearNowPlaying() async {
     ++_playToken;
     _queue = [];
+    _notifyQueueChanged();
     _currentIndex = 0;
     _prefetchedForIndex = null;
     _skipNextInFlight = null;
@@ -770,6 +872,7 @@ class AudioPlayerService {
     await _nowPlaying.close();
     await _recentlyPlayedSubject.close();
     await _currentIndexSubject.close();
+    await _queueVersion.close();
     await _trackLoading.close();
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 
 import 'package:path/path.dart' as p;
 
@@ -17,6 +18,17 @@ class LocalAudioTrack {
 }
 
 class LocalAudioProvider {
+  static final StreamController<int> _changes =
+      StreamController<int>.broadcast();
+  static int _changeTick = 0;
+
+  static Stream<int> get changes => _changes.stream;
+
+  static void notifyChanged() {
+    if (_changes.isClosed) return;
+    _changes.add(++_changeTick);
+  }
+
   static const Set<String> _supportedExtensions = {
     '.mp3',
     '.m4a',

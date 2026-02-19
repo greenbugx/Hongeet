@@ -25,6 +25,7 @@ class LocalAudiosScreen extends StatefulWidget {
 class _LocalAudiosScreenState extends State<LocalAudiosScreen> {
   late Future<List<LocalAudioTrack>> _tracksFuture;
   StreamSubscription<int>? _downloadsChangeSub;
+  StreamSubscription<int>? _localAudiosChangeSub;
 
   @override
   void initState() {
@@ -34,11 +35,16 @@ class _LocalAudiosScreenState extends State<LocalAudiosScreen> {
       if (!mounted) return;
       _refresh();
     });
+    _localAudiosChangeSub = LocalAudioProvider.changes.listen((_) {
+      if (!mounted) return;
+      _refresh();
+    });
   }
 
   @override
   void dispose() {
     _downloadsChangeSub?.cancel();
+    _localAudiosChangeSub?.cancel();
     super.dispose();
   }
 
@@ -132,7 +138,9 @@ class _LocalAudiosScreenState extends State<LocalAudiosScreen> {
                     }
 
                     return Column(
-                      children: tracks.map((track) {
+                      children: tracks.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final track = entry.value;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
                           child: GlassContainer(
@@ -153,7 +161,14 @@ class _LocalAudiosScreenState extends State<LocalAudiosScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               onTap: () {
-                                player.playLocalFile(track.path, track.name);
+                                // Build queue from all local audio tracks, starting at clicked track
+                                player.playLocalFiles(
+                                  files: tracks.map((t) => (
+                                    path: t.path,
+                                    name: t.name,
+                                  )).toList(),
+                                  startIndex: index,
+                                );
                                 AppMessenger.show('Playing ${track.name}');
                               },
                             ),

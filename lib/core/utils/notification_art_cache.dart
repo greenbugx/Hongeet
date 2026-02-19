@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'app_logger.dart';
+import 'streaming_preferences.dart';
 import 'youtube_thumbnail_utils.dart';
 
 class NotificationArtCache {
@@ -21,6 +22,11 @@ class NotificationArtCache {
   static Future<Uri?> getSquareArtUri(String imageUrl) async {
     final normalized = imageUrl.trim();
     if (normalized.isEmpty) return null;
+
+    // Only fetch artwork over the network when streaming is enabled
+    await StreamingPreferences.load();
+    if (!StreamingPreferences.isStreamingEnabled) return null;
+
     final cacheKey = '$_cacheVersion|$normalized';
 
     final memo = _memoryCache[cacheKey];

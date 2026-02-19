@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:hongit/core/theme/app_theme.dart';
 import 'package:hongit/core/utils/audio_player_service.dart';
 import 'package:hongit/data/api/saavn_api.dart';
 import 'package:hongit/data/api/youtube_api.dart';
 import 'package:hongit/data/models/saavn_song.dart';
 import 'package:hongit/features/search/widgets/song_card.dart';
+import 'package:hongit/features/library/local_audio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/app_logger.dart';
@@ -22,6 +25,7 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
+  // ...existing code...
   final TextEditingController _controller = TextEditingController();
   Future<List<SaavnSong>>? _searchFuture;
   String _lastQuery = '';
@@ -78,28 +82,113 @@ class _SearchScreenState extends State<SearchScreen> {
 
   static const int minSearchLength = 2;
 
+  late List<LocalAudioTrack> _localAudios = [];
+  late Future<List<LocalAudioTrack>> _localAudiosFuture = Future.value([]);
+
   bool get isSearching => _controller.text.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    _searchFuture = _performSearch(_quickPicksQuery);
+    _initSearchMode();
+  }
+
+  Future<void> _initSearchMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final useYoutube = prefs.getBool('use_youtube_service') ?? false;
+    final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+    if (!useYoutube && !useSaavn) {
+      _localAudiosFuture = _loadLocalAudiosWithPermission();
+      _localAudiosFuture.then((tracks) {
+        if (mounted) {
+          setState(() => _localAudios = tracks);
+        }
+      });
+    } else {
+      setState(() {
+        _searchFuture = _performSearch(_quickPicksQuery);
+      });
+    }
+  }
+
+  Future<bool> _ensureAudioPermission() async {
+    if (!Platform.isAndroid) return true;
+
+    var audioStatus = await Permission.audio.status;
+    if (audioStatus.isGranted || audioStatus.isLimited) {
+      return true;
+    }
+
+    audioStatus = await Permission.audio.request();
+    if (audioStatus.isGranted || audioStatus.isLimited) {
+      return true;
+    }
+
+    var storageStatus = await Permission.storage.status;
+    if (storageStatus.isGranted) return true;
+    storageStatus = await Permission.storage.request();
+    return storageStatus.isGranted;
+  }
+
+  Future<List<LocalAudioTrack>> _loadLocalAudiosWithPermission() async {
+    final granted = await _ensureAudioPermission();
+    if (!granted) return const [];
+    return LocalAudioProvider.load(maxItems: 500);
   }
 
   Future<void> _refreshSearch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final useYoutube = prefs.getBool('use_youtube_service') ?? false;
+    final useSaavn = prefs.getBool('use_saavn_service') ?? false;
     final query = _controller.text.trim();
     setState(() {
       if (query.isEmpty) {
         _lastQuery = '';
-        _searchFuture = _performSearch(_quickPicksQuery, forceRefresh: true);
+        if (!useYoutube && !useSaavn) {
+          // Reload local audios when in local-only mode
+          _searchFuture = null;
+          _localAudiosFuture = _loadLocalAudiosWithPermission();
+          _localAudiosFuture.then((tracks) {
+            if (!mounted) return;
+            setState(() => _localAudios = tracks);
+          });
+        } else {
+          _searchFuture = _performSearch(_quickPicksQuery, forceRefresh: true);
+        }
       } else if (query.length < minSearchLength) {
         _searchFuture = null;
       } else {
         _lastQuery = query;
-        _searchFuture = _performSearch(query, forceRefresh: true);
+        if (!useYoutube && !useSaavn) {
+          setState(() {
+            _searchFuture = _searchLocalAudios(query);
+          });
+        } else {
+          _searchFuture = _performSearch(query, forceRefresh: true);
+        }
       }
     });
-    await _searchFuture?.catchError((_) => <SaavnSong>[]);
+    if (useYoutube || useSaavn) {
+      await _searchFuture?.catchError((_) => <SaavnSong>[]);
+    }
+  }
+
+  Future<List<SaavnSong>> _searchLocalAudios(String query) async {
+    final normalized = query.toLowerCase();
+    final results = _localAudios
+        .where((track) => track.name.toLowerCase().contains(normalized))
+        .map(
+          (track) => SaavnSong(
+            id: track.path,
+            name: track.name,
+            artists: 'Local Audio',
+            imageUrl: '',
+            duration: 0,
+            downloadUrls: const [],
+          ),
+        )
+        .toList();
+    return results;
   }
 
   Future<List<SaavnSong>> _performSearch(
@@ -110,10 +199,17 @@ class _SearchScreenState extends State<SearchScreen> {
     if (normalizedQuery.isEmpty) return [];
 
     final prefs = await SharedPreferences.getInstance();
-    final useYoutube = prefs.getBool('use_youtube_service') ?? true;
+    final useYoutube = prefs.getBool('use_youtube_service') ?? false;
+    final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+    // If neither streaming service is enabled, do not perform network searches
+    if (!useYoutube && !useSaavn) return const [];
     final isQuickPicksQuery = normalizedQuery.toLowerCase() == _quickPicksQuery;
     final cacheKey =
-        '${useYoutube ? "yt" : "saavn"}:${normalizedQuery.toLowerCase()}';
+        '${useYoutube
+            ? "yt"
+            : useSaavn
+            ? "saavn"
+            : "none"}:${normalizedQuery.toLowerCase()}';
 
     if (!forceRefresh) {
       final cached = _sessionSearchCache[cacheKey];
@@ -153,9 +249,12 @@ class _SearchScreenState extends State<SearchScreen> {
       if (useYoutube) {
         AppLogger.info('Using YouTube service for search: "$normalizedQuery"');
         songs = await YoutubeApi.searchSongs(normalizedQuery);
-      } else {
+      } else if (useSaavn) {
         AppLogger.info('Using Saavn service for search: "$normalizedQuery"');
         songs = await SaavnApi.searchSongs(normalizedQuery);
+      } else {
+        // No streaming service enabled; return empty result.
+        return const [];
       }
 
       final globallyFiltered = _applyGlobalResultFilter(songs);
@@ -484,9 +583,25 @@ class _SearchScreenState extends State<SearchScreen> {
     final trimmed = query.trim();
 
     if (trimmed.isEmpty) {
-      setState(() {
-        _lastQuery = '';
-        _searchFuture = _performSearch(_quickPicksQuery);
+      // Decide behavior based on enabled services: show quick-picks when
+      // streaming is enabled, otherwise clear search (local list shown).
+      SharedPreferences.getInstance().then((prefs) {
+        final useYoutube = prefs.getBool('use_youtube_service') ?? false;
+        final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+        setState(() {
+          _lastQuery = '';
+          if (!useYoutube && !useSaavn) {
+            // Clear search results and (re)load local audios.
+            _searchFuture = null;
+            _localAudiosFuture = _loadLocalAudiosWithPermission();
+            _localAudiosFuture.then((tracks) {
+              if (!mounted) return;
+              setState(() => _localAudios = tracks);
+            });
+          } else {
+            _searchFuture = _performSearch(_quickPicksQuery);
+          }
+        });
       });
       return;
     }
@@ -501,9 +616,18 @@ class _SearchScreenState extends State<SearchScreen> {
 
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (trimmed == _lastQuery) return;
-      setState(() {
-        _lastQuery = trimmed;
-        _searchFuture = _performSearch(trimmed);
+      // Choose local search when both streaming services are off.
+      SharedPreferences.getInstance().then((prefs) {
+        final useYoutube = prefs.getBool('use_youtube_service') ?? false;
+        final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+        setState(() {
+          _lastQuery = trimmed;
+          if (!useYoutube && !useSaavn) {
+            _searchFuture = _searchLocalAudios(trimmed);
+          } else {
+            _searchFuture = _performSearch(trimmed);
+          }
+        });
       });
     });
   }
@@ -521,86 +645,320 @@ class _SearchScreenState extends State<SearchScreen> {
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final animateSectionHeader = perfMode == UiPerformanceMode.full;
 
-    return GlassPage(
-      child: RefreshIndicator(
-        onRefresh: _refreshSearch,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          cacheExtent: 720,
-          children: [
-            const Text(
-              'Welcome to\nHongeet',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 20),
+    return FutureBuilder<Map<String, bool>>(
+      future: SharedPreferences.getInstance().then(
+        (prefs) => {
+          'use_youtube_service': prefs.getBool('use_youtube_service') ?? false,
+          'use_saavn_service': prefs.getBool('use_saavn_service') ?? false,
+        },
+      ),
+      builder: (context, snapshot) {
+        final useYoutube = snapshot.data?['use_youtube_service'] ?? false;
+        final useSaavn = snapshot.data?['use_saavn_service'] ?? false;
+        final isLocalMode = !useYoutube && !useSaavn;
 
-            // Search Bar
-            GlassContainer(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _controller,
-                  onChanged: _onSearchChanged,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    icon: Icon(
-                      themeProvider.useGlassTheme
-                          ? CupertinoIcons.search
-                          : Icons.search,
-                      color: Colors.white70,
+        return GlassPage(
+          child: RefreshIndicator(
+            onRefresh: _refreshSearch,
+            child: FutureBuilder<List<LocalAudioTrack>>(
+              future: isLocalMode ? _localAudiosFuture : null,
+              builder: (context, localSnapshot) {
+                if (isLocalMode &&
+                    localSnapshot.connectionState == ConnectionState.done &&
+                    localSnapshot.hasData) {
+                  _localAudios = localSnapshot.data ?? [];
+                }
+
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  cacheExtent: 720,
+                  children: [
+                    const Text(
+                      'Welcome to\nHongeet',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    hintText: 'Search songs, artists...',
-                    hintStyle: const TextStyle(color: Colors.white54),
-                    border: InputBorder.none,
-                    suffixIcon: _controller.text.isNotEmpty
-                        ? IconButton(
+                    const SizedBox(height: 20),
+
+                    GlassContainer(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          controller: _controller,
+                          onChanged: _onSearchChanged,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
                             icon: Icon(
                               themeProvider.useGlassTheme
-                                  ? CupertinoIcons.clear_circled_solid
-                                  : Icons.close,
+                                  ? CupertinoIcons.search
+                                  : Icons.search,
                               color: Colors.white70,
                             ),
-                            onPressed: () {
-                              _controller.clear();
-                              _onSearchChanged('');
-                            },
-                          )
-                        : null,
+                            hintText: isLocalMode
+                                ? 'Search local audio...'
+                                : 'Search songs, artists...',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            border: InputBorder.none,
+                            suffixIcon: _controller.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(
+                                      themeProvider.useGlassTheme
+                                          ? CupertinoIcons.clear_circled_solid
+                                          : Icons.close,
+                                      color: Colors.white70,
+                                    ),
+                                    onPressed: () {
+                                      _controller.clear();
+                                      _onSearchChanged('');
+                                    },
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    if (!isLocalMode || isSearching) ...[
+                      animateSectionHeader
+                          ? AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Text(
+                                isSearching ? 'Search Results' : 'Quick Picks',
+                                key: ValueKey(isSearching),
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              isSearching ? 'Search Results' : 'Quick Picks',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Results
+                    isLocalMode
+                        ? _buildLocalSearchResults(context)
+                        : _buildSearchResults(context),
+
+                    const SizedBox(height: 80),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLocalSearchResults(BuildContext context) {
+    final query = _controller.text.trim();
+    if (query.isNotEmpty && query.length < minSearchLength) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'Type at least $minSearchLength characters to search',
+            style: const TextStyle(color: Colors.white54, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    // If no query, use the already-loaded local audio list (avoids triggering
+    // a network search and ensures the home/Search screen shows local files).
+    if (query.isEmpty) {
+      final results = _localAudios
+          .map(
+            (track) => SaavnSong(
+              id: track.path,
+              name: track.name,
+              artists: 'Local Audio',
+              imageUrl: '',
+              duration: 0,
+              downloadUrls: const [],
+            ),
+          )
+          .toList(growable: false);
+
+      if (results.isEmpty) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              'No local audio files found on your device',
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      }
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Column(
+          children: results.asMap().entries.map((entry) {
+            final index = entry.key;
+            final song = entry.value;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: GlassContainer(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              song.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Local Audio',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white54,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.play_fill),
+                        onPressed: () async {
+                          await AudioPlayerService().playLocalFiles(
+                            files: results
+                                .map((s) => (path: s.id, name: s.name))
+                                .toList(),
+                            startIndex: index,
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
+            );
+          }).toList(),
+        ),
+      );
+    }
+
+    // Otherwise perform the existing search-backed flow.
+    return FutureBuilder<List<SaavnSong>>(
+      future: _searchFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Error loading local audio: ${snapshot.error}',
+              style: const TextStyle(color: Colors.red),
             ),
+          );
+        }
 
-            const SizedBox(height: 28),
+        final results = snapshot.data ?? [];
+        if (results.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Text(
+                'No matches found',
+                style: const TextStyle(color: Colors.white54, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
 
-            animateSectionHeader
-                ? AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: Text(
-                      isSearching ? 'Search Results' : 'Quick Picks',
-                      key: ValueKey(isSearching),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  )
-                : Text(
-                    isSearching ? 'Search Results' : 'Quick Picks',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Column(
+            children: results.asMap().entries.map((entry) {
+              final index = entry.key;
+              final song = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: GlassContainer(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                song.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Local Audio',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: const Icon(CupertinoIcons.play_fill),
+                          onPressed: () async {
+                            await AudioPlayerService().playLocalFiles(
+                              files: results
+                                  .map((s) => (path: s.id, name: s.name))
+                                  .toList(),
+                              startIndex: index,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
-            const SizedBox(height: 16),
-
-            // Results
-            _buildSearchResults(context),
-
-            const SizedBox(height: 80),
-          ],
-        ),
-      ),
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
     );
   }
 
