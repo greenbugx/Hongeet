@@ -111,6 +111,40 @@ class BackgroundAudioHandler extends BaseAudioHandler
     final imageUrl = rawImageUrl.trim();
     if (imageUrl.isEmpty) return null;
 
+    if (YoutubeThumbnailUtils.isYtmArtworkUrl(imageUrl)) {
+      final candidates = YoutubeThumbnailUtils.candidateUrls(
+        imageUrl: imageUrl,
+      );
+
+      String pickByToken(String token) {
+        for (final url in candidates) {
+          if (url.contains(token)) return url;
+        }
+        return '';
+      }
+
+      final ytm1024 = pickByToken('w1024-h1024-l90-rj');
+      final ytm720 = pickByToken('w720-h720-l90-rj');
+      final ytm544 = pickByToken('w544-h544-l90-rj');
+      final ytm480 = pickByToken('w480-h480-l90-rj');
+      final ytm360 = pickByToken('w360-h360-l90-rj');
+      final preferred = ytm1024.isNotEmpty
+          ? ytm1024
+          : ytm720.isNotEmpty
+          ? ytm720
+          : ytm544.isNotEmpty
+          ? ytm544
+          : ytm480.isNotEmpty
+          ? ytm480
+          : ytm360.isNotEmpty
+          ? ytm360
+          : candidates.isNotEmpty
+          ? candidates.first
+          : imageUrl;
+
+      return Uri.tryParse(preferred) ?? Uri.tryParse(imageUrl);
+    }
+
     final youtubeVideoId = YoutubeThumbnailUtils.videoIdFromUrl(imageUrl);
     if (youtubeVideoId != null) {
       final candidates = YoutubeThumbnailUtils.candidateUrls(
@@ -124,19 +158,19 @@ class BackgroundAudioHandler extends BaseAudioHandler
         return '';
       }
 
-      final maxRes = pickByToken('/maxresdefault.jpg');
       final sdDefault = pickByToken('/sddefault.jpg');
       final hq720 = pickByToken('/hq720.jpg');
       final hqDefault = pickByToken('/hqdefault.jpg');
+      final maxRes = pickByToken('/maxresdefault.jpg');
 
-      final preferred = maxRes.isNotEmpty
-          ? maxRes
-          : sdDefault.isNotEmpty
+      final preferred = sdDefault.isNotEmpty
           ? sdDefault
           : hq720.isNotEmpty
           ? hq720
           : hqDefault.isNotEmpty
           ? hqDefault
+          : maxRes.isNotEmpty
+          ? maxRes
           : candidates.isNotEmpty
           ? candidates.first
           : imageUrl;

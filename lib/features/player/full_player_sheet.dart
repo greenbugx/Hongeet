@@ -278,7 +278,7 @@ class FullPlayerSheet extends StatelessWidget {
                     YoutubeThumbnailUtils.preferredArtworkScale(
                       songId: currentSong?.id,
                       imageUrl: now.imageUrl,
-                      youtubeVideoScale: 1.9,
+                      youtubeVideoScale: 1.0,
                       normalScale: 1.0,
                     );
                 final currentArtCandidates =
@@ -826,7 +826,7 @@ class FullPlayerSheet extends StatelessWidget {
                                                       .song
                                                       .meta
                                                       .imageUrl,
-                                                  youtubeVideoScale: 1.9,
+                                                  youtubeVideoScale: 1.0,
                                                   normalScale: 1.0,
                                                 ),
                                             child: FallbackNetworkImage(
@@ -1039,6 +1039,26 @@ class FullPlayerSheet extends StatelessWidget {
 }
 
 void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
+  final stableContext = context;
+  final rootNavigator = Navigator.of(stableContext, rootNavigator: true);
+  final useGlassTheme = Provider.of<ThemeProvider>(
+    context,
+    listen: false,
+  ).useGlassTheme;
+  final addedInSheet = <String>{};
+
+  IconData playlistIcon() {
+    return useGlassTheme
+        ? CupertinoIcons.music_note_list
+        : Icons.playlist_add_rounded;
+  }
+
+  IconData addedIcon() {
+    return useGlassTheme
+        ? CupertinoIcons.check_mark_circled_solid
+        : Icons.check_circle;
+  }
+
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.black.withValues(alpha: 0.85),
@@ -1046,71 +1066,102 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (_) {
-      return StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
-        stream: PlaylistManager.stream,
-        builder: (_, snap) {
-          final playlists = snap.data ?? {};
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
+            stream: PlaylistManager.stream,
+            builder: (_, snap) {
+              final playlists = snap.data ?? {};
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Add to Playlist',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-
-                if (playlists.isEmpty)
-                  const Text(
-                    'No playlists yet',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-
-                ...playlists.keys
-                    .where((name) => name != PlaylistManager.systemFavourites)
-                    .map(
-                      (name) => ListTile(
-                        leading: const Icon(CupertinoIcons.music_note_list),
-                        title: Text(name),
-                        onTap: () async {
-                          final navigator = Navigator.of(context);
-                          final success = await PlaylistManager.addSong(name, {
-                            'id': song.id,
-                            'title': song.meta.title,
-                            'artist': song.meta.artist,
-                            'imageUrl': song.meta.imageUrl,
-                          });
-
-                          navigator.pop();
-
-                          if (success) {
-                            AppMessenger.show(
-                              'Added to "$name"',
-                              color: Colors.green.shade700,
-                            );
-                          } else {
-                            AppMessenger.show(
-                              'Already in "$name"',
-                              color: Colors.orange.shade700,
-                            );
-                          }
-                        },
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Add to Playlist',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
+                    const SizedBox(height: 12),
 
-                const SizedBox(height: 8),
+                    if (playlists.isEmpty)
+                      const Text(
+                        'No playlists yet',
+                        style: TextStyle(color: Colors.white54),
+                      ),
 
-                TextButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    _showCreatePlaylistDialog(context);
-                  },
-                  child: const Text('＋ Create new playlist'),
+                    ...playlists.keys
+                        .where(
+                          (name) => name != PlaylistManager.systemFavourites,
+                        )
+                        .map((name) {
+                          final playlistSongs = playlists[name] ?? const [];
+                          final exists = playlistSongs.any(
+                            (entry) =>
+                                (entry['id'] ?? '').toString().trim() ==
+                                song.id,
+                          );
+                          final added = exists || addedInSheet.contains(name);
+
+                          return ListTile(
+                            leading: Icon(
+                              added ? addedIcon() : playlistIcon(),
+                              color: added ? Colors.green.shade400 : null,
+                            ),
+                            title: Text(name),
+                            onTap: () async {
+                              if (added) {
+                                AppMessenger.show(
+                                  'Already in "$name"',
+                                  color: Colors.orange.shade700,
+                                );
+                                return;
+                              }
+
+                              final success =
+                                  await PlaylistManager.addSong(name, {
+                                    'id': song.id,
+                                    'title': song.meta.title,
+                                    'artist': song.meta.artist,
+                                    'imageUrl': song.meta.imageUrl,
+                                  });
+                              if (!context.mounted) return;
+
+                              if (success) {
+                                setModalState(() => addedInSheet.add(name));
+                                AppMessenger.show(
+                                  'Added to "$name"',
+                                  color: Colors.green.shade700,
+                                );
+                              } else {
+                                AppMessenger.show(
+                                  'Already in "$name"',
+                                  color: Colors.orange.shade700,
+                                );
+                              }
+                            },
+                          );
+                        }),
+
+                    const SizedBox(height: 8),
+
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!rootNavigator.mounted) return;
+                          _showCreatePlaylistDialog(rootNavigator.context);
+                        });
+                      },
+                      child: const Text('+ Create new playlist'),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       );
@@ -1121,9 +1172,9 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
 void _showCreatePlaylistDialog(BuildContext context) {
   final controller = TextEditingController();
 
-  showDialog(
+  showDialog<void>(
     context: context,
-    builder: (_) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       title: const Text('New Playlist'),
       content: TextField(
         controller: controller,
@@ -1131,7 +1182,10 @@ void _showCreatePlaylistDialog(BuildContext context) {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            FocusScope.of(dialogContext).unfocus();
+            Navigator.of(dialogContext).pop();
+          },
           child: const Text('Cancel'),
         ),
         TextButton(
@@ -1139,9 +1193,10 @@ void _showCreatePlaylistDialog(BuildContext context) {
             final name = controller.text.trim();
             if (name.isEmpty) return;
 
-            final navigator = Navigator.of(context);
+            FocusScope.of(dialogContext).unfocus();
             await PlaylistManager.create(name);
-            navigator.pop();
+            if (!dialogContext.mounted) return;
+            Navigator.of(dialogContext).pop();
             AppMessenger.show(
               'Playlist "$name" created',
               color: Colors.green.shade700,
