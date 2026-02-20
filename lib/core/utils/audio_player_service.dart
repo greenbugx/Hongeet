@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'app_messenger.dart';
 import 'app_logger.dart';
 import 'data_saver_settings.dart';
+import 'streaming_preferences.dart';
 import '../../data/api/saavn_song_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../data/api/youtube_api.dart';
@@ -36,6 +39,7 @@ class AudioPlayerService {
 
   AudioPlayerService._internal() {
     _player.playerStateStream.listen(_onPlayerStateChanged);
+    _positionSub = _player.positionStream.listen(_onPlaybackPosition);
     _player.setLoopMode(LoopMode.off);
     _loadRecentlyPlayed();
     PlaylistManager.load();
@@ -49,8 +53,10 @@ class AudioPlayerService {
 
   int _currentIndex = 0;
   int _playToken = 0;
-
-  String? _loadedSongId;
+  DateTime? _lastAutoSkipNoticeAt;
+  StreamSubscription<Duration>? _positionSub;
+  Future<void>? _skipNextInFlight;
+  int? _prefetchedForIndex;
 
   final _nowPlaying = BehaviorSubject<NowPlaying?>();
   Stream<NowPlaying?> get nowPlayingStream => _nowPlaying.stream;
@@ -58,6 +64,12 @@ class AudioPlayerService {
   final _currentIndexSubject = BehaviorSubject<int?>.seeded(null);
   Stream<int?> get currentIndexStream => _currentIndexSubject.stream;
   int? get currentIndex => _currentIndexSubject.value;
+
+  final _queueVersion = BehaviorSubject<int>.seeded(0);
+  Stream<int> get queueChangeStream => _queueVersion.stream;
+  void _notifyQueueChanged() {
+    if (!_queueVersion.isClosed) _queueVersion.add(_queueVersion.value + 1);
+  }
 
   final _trackLoading = BehaviorSubject<bool>.seeded(false);
   Stream<bool> get trackLoadingStream => _trackLoading.stream;
@@ -74,7 +86,9 @@ class AudioPlayerService {
   LoopMode get loopMode => _player.loopMode;
 
   final Map<String, _CachedUrl> _urlCache = {};
+  final Map<String, Future<_ResolvedStream>> _resolveInFlight = {};
   final Map<String, int> _youtubeRetryCount = {};
+  final Map<String, int> _transientRetryCount = {};
 
   static const Map<String, String> _defaultStreamHeaders = {
     'User-Agent':
@@ -82,58 +96,84 @@ class AudioPlayerService {
     'Accept': '*/*',
     'Accept-Language': 'en-US,en;q=0.9',
   };
+  static const Duration _loadWatchdogTimeout = Duration(seconds: 26);
 
   Future<_ResolvedStream> _resolveUrl(String id) async {
     final qualityKey = DataSaverSettings.isEnabled ? 'ds' : 'hq';
     final cacheKey = '$id::$qualityKey';
     final bool isYoutube = id.startsWith('yt:');
+    final inFlight = _resolveInFlight[cacheKey];
+    if (inFlight != null) {
+      return inFlight;
+    }
 
-    if (_urlCache.containsKey(cacheKey)) {
-      final cached = _urlCache[cacheKey]!;
-      final age = DateTime.now().difference(cached.timestamp);
+    final future = () async {
+      if (_urlCache.containsKey(cacheKey)) {
+        final cached = _urlCache[cacheKey]!;
+        final age = DateTime.now().difference(cached.timestamp);
 
-      final maxAge = isYoutube ? 1 : 24;
+        final maxAge = isYoutube ? 1 : 24;
 
-      if (age.inHours < maxAge) {
-        AppLogger.info(
-          'Using cached URL for $cacheKey (age: ${age.inMinutes}m)',
-        );
-        return _ResolvedStream(
-          url: cached.url,
-          headers: cached.headers ?? const {},
-        );
+        if (age.inHours < maxAge) {
+          AppLogger.info(
+            'Using cached URL for $cacheKey (age: ${age.inMinutes}m)',
+          );
+          return _ResolvedStream(
+            url: cached.url,
+            headers: cached.headers ?? const {},
+          );
+        } else {
+          AppLogger.info(
+            'Cache expired for $cacheKey (age: ${age.inHours}h), fetching fresh URL',
+          );
+          _urlCache.remove(cacheKey);
+        }
+      }
+
+      final String url;
+      final Map<String, String> headers;
+
+      if (isYoutube) {
+        final prefs = await SharedPreferences.getInstance();
+        final useYoutube = prefs.getBool('use_youtube_service') ?? true;
+        if (!useYoutube) {
+          throw StateError('YouTube streaming disabled by user');
+        }
+        final videoId = id.substring(3);
+        AppLogger.info('Using YouTube service for playback: $videoId');
+        final extracted = await YoutubeSongApi.fetchBestStream(videoId);
+        url = extracted.url;
+        headers = extracted.headers;
       } else {
-        AppLogger.info(
-          'Cache expired for $cacheKey (age: ${age.inHours}h), fetching fresh URL',
-        );
-        _urlCache.remove(cacheKey);
+        final prefs = await SharedPreferences.getInstance();
+        final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+        if (!useSaavn) {
+          throw StateError('Saavn streaming disabled by user');
+        }
+        AppLogger.info('Using Saavn service for playback: $id');
+        url = await SaavnSongApi.fetchBestStreamUrl(id);
+        headers = const {};
+      }
+
+      _urlCache[cacheKey] = _CachedUrl(
+        url: url,
+        headers: headers.isEmpty ? null : headers,
+        timestamp: DateTime.now(),
+      );
+
+      if (_urlCache.length > 500) _cleanCache();
+
+      return _ResolvedStream(url: url, headers: headers);
+    }();
+
+    _resolveInFlight[cacheKey] = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_resolveInFlight[cacheKey], future)) {
+        _resolveInFlight.remove(cacheKey);
       }
     }
-
-    final String url;
-    final Map<String, String> headers;
-
-    if (isYoutube) {
-      final videoId = id.substring(3);
-      AppLogger.info('Using YouTube service for playback: $videoId');
-      final extracted = await YoutubeSongApi.fetchBestStream(videoId);
-      url = extracted.url;
-      headers = extracted.headers;
-    } else {
-      AppLogger.info('Using Saavn service for playback: $id');
-      url = await SaavnSongApi.fetchBestStreamUrl(id);
-      headers = const {};
-    }
-
-    _urlCache[cacheKey] = _CachedUrl(
-      url: url,
-      headers: headers.isEmpty ? null : headers,
-      timestamp: DateTime.now(),
-    );
-
-    if (_urlCache.length > 500) _cleanCache();
-
-    return _ResolvedStream(url: url, headers: headers);
   }
 
   void _cleanCache() {
@@ -142,6 +182,156 @@ class AudioPlayerService {
     for (int i = 0; i < 100 && i < entries.length; i++) {
       _urlCache.remove(entries[i].key);
     }
+  }
+
+  void _onPlaybackPosition(Duration position) {
+    final duration = _player.duration;
+    if (duration == null || duration <= Duration.zero) return;
+    if (isTrackLoading) return;
+    final remaining = duration - position;
+    if (remaining <= const Duration(seconds: 18)) {
+      unawaited(_prefetchNextIfNeeded());
+    }
+  }
+
+  Future<void> _prefetchNextIfNeeded() async {
+    if (_queue.isEmpty) return;
+    if (_currentIndex < 0 || _currentIndex >= _queue.length - 1) return;
+    if (_prefetchedForIndex == _currentIndex) return;
+
+    final nextSong = _queue[_currentIndex + 1];
+    if (nextSong.isLocal) {
+      _prefetchedForIndex = _currentIndex;
+      return;
+    }
+
+    _prefetchedForIndex = _currentIndex;
+    try {
+      await _resolveUrl(nextSong.id).timeout(const Duration(seconds: 10));
+      AppLogger.info('Prefetched next stream for ${nextSong.meta.title}');
+    } catch (e) {
+      _prefetchedForIndex = null;
+      AppLogger.warning('Next stream prefetch failed: $e', error: e);
+    }
+  }
+
+  void _showAutoSkipNotice() {
+    final now = DateTime.now();
+    final last = _lastAutoSkipNoticeAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastAutoSkipNoticeAt = now;
+    AppMessenger.show('Skipping song: server/load error');
+  }
+
+  void _removeCachedUrlsForSong(String songId) {
+    final keysToRemove = _urlCache.keys
+        .where((key) => key == songId || key.startsWith('$songId::'))
+        .toList(growable: false);
+    for (final key in keysToRemove) {
+      _urlCache.remove(key);
+    }
+  }
+
+  bool _isTransientLoadError(String errorText) {
+    final lower = errorText.toLowerCase();
+    const transientTokens = <String>[
+      'failed host lookup',
+      'no address associated with hostname',
+      'socketexception',
+      'transporterror',
+      'unable to download api page',
+      'network is unreachable',
+      'temporary failure in name resolution',
+      'connection reset',
+      'connection aborted',
+      'timed out',
+      'timeout',
+      'the page needs to be reloaded',
+      'page needs to be reloaded',
+      'failed to extract any player response',
+      'source error',
+      'http exception',
+      'connection closed before full header was received',
+      'watchdog timeout',
+    ];
+
+    return transientTokens.any(lower.contains);
+  }
+
+  Timer _startLoadWatchdog({
+    required QueuedSong song,
+    required int index,
+    required int token,
+  }) {
+    return Timer(_loadWatchdogTimeout, () {
+      unawaited(
+        _handleLoadWatchdogTimeout(song: song, index: index, token: token),
+      );
+    });
+  }
+
+  Future<void> _handleLoadWatchdogTimeout({
+    required QueuedSong song,
+    required int index,
+    required int token,
+  }) async {
+    if (token != _playToken) return;
+    if (!isTrackLoading) return;
+    final state = _player.playerState.processingState;
+    if (state == ProcessingState.ready || state == ProcessingState.completed) {
+      return;
+    }
+
+    AppLogger.warning(
+      'Load watchdog timeout for ${song.meta.title}, forcing recovery',
+    );
+
+    final retried = await _retryCurrentTrackIfTransient(
+      song: song,
+      index: index,
+      token: token,
+      errorText: 'watchdog timeout',
+    );
+    if (retried || token != _playToken) return;
+
+    if (_currentIndex + 1 < _queue.length) {
+      _showAutoSkipNotice();
+      await Future.delayed(const Duration(milliseconds: 500));
+      await skipNext();
+    }
+  }
+
+  Future<bool> _retryCurrentTrackIfTransient({
+    required QueuedSong song,
+    required int index,
+    required int token,
+    required String errorText,
+  }) async {
+    if (!_isTransientLoadError(errorText)) return false;
+
+    final attempts = (_transientRetryCount[song.id] ?? 0) + 1;
+    const maxAttempts = 2;
+    if (attempts > maxAttempts) {
+      _transientRetryCount.remove(song.id);
+      return false;
+    }
+
+    _transientRetryCount[song.id] = attempts;
+    _removeCachedUrlsForSong(song.id);
+    AppLogger.warning(
+      'Transient load failure for ${song.meta.title}, retrying ($attempts/$maxAttempts)',
+    );
+
+    await Future.delayed(Duration(milliseconds: 700 * attempts));
+    if (token != _playToken) {
+      return true;
+    }
+
+    final retryToken = ++_playToken;
+    await _loadAndPlaySong(index, retryToken);
+    return true;
   }
 
   Future<void> _loadRecentlyPlayed() async {
@@ -164,6 +354,11 @@ class AudioPlayerService {
       return;
     }
 
+    final loadWatchdog = _startLoadWatchdog(
+      song: song,
+      index: index,
+      token: token,
+    );
     try {
       _currentIndex = index;
       _currentIndexSubject.add(index);
@@ -171,7 +366,6 @@ class AudioPlayerService {
       _trackLoading.add(true);
 
       await _player.stop();
-      _loadedSongId = null;
 
       if (token != _playToken) return;
 
@@ -191,11 +385,10 @@ class AudioPlayerService {
               headers: {..._defaultStreamHeaders, ...resolved.headers},
             );
 
-      await _player.setAudioSource(source);
+      await _player.setAudioSource(source).timeout(const Duration(seconds: 18));
 
       if (token != _playToken) return;
 
-      _loadedSongId = song.id;
       _currentIndex = index;
       _currentIndexSubject.add(index);
       _nowPlaying.add(song.meta);
@@ -207,6 +400,8 @@ class AudioPlayerService {
 
       await _addToRecentlyPlayed(song);
       _youtubeRetryCount.remove(song.id);
+      _transientRetryCount.remove(song.id);
+      unawaited(_prefetchNextIfNeeded());
 
       AppLogger.info(
         'Successfully loaded and playing: ${song.meta.title} (index: $index)',
@@ -221,7 +416,7 @@ class AudioPlayerService {
       if (song.id.startsWith('yt:') && errText.contains('403')) {
         final attempts = (_youtubeRetryCount[song.id] ?? 0) + 1;
         _youtubeRetryCount[song.id] = attempts;
-        _urlCache.remove(song.id);
+        _removeCachedUrlsForSong(song.id);
 
         if (attempts <= 1) {
           AppLogger.warning(
@@ -234,16 +429,47 @@ class AudioPlayerService {
         }
 
         _youtubeRetryCount.remove(song.id);
+        _transientRetryCount.remove(song.id);
         AppLogger.warning('YouTube 403 persists after retries, skipping track');
         if (_currentIndex + 1 < _queue.length) {
+          _showAutoSkipNotice();
           await Future.delayed(const Duration(milliseconds: 500));
           await skipNext();
         }
+        return;
+      }
+
+      final lowerError = errText.toLowerCase();
+      final retried = await _retryCurrentTrackIfTransient(
+        song: song,
+        index: index,
+        token: token,
+        errorText: lowerError,
+      );
+      if (retried) {
+        return;
+      }
+
+      if (_currentIndex + 1 < _queue.length) {
+        _showAutoSkipNotice();
+        await Future.delayed(const Duration(milliseconds: 500));
+        await skipNext();
       }
     } catch (e) {
       AppLogger.warning('Failed to load song at index $index: $e', error: e);
 
+      final retried = await _retryCurrentTrackIfTransient(
+        song: song,
+        index: index,
+        token: token,
+        errorText: e.toString(),
+      );
+      if (retried) {
+        return;
+      }
+
       if (_currentIndex + 1 < _queue.length) {
+        _showAutoSkipNotice();
         await Future.delayed(const Duration(milliseconds: 500));
         await skipNext();
       }
@@ -251,6 +477,7 @@ class AudioPlayerService {
       if (token == _playToken) {
         _trackLoading.add(false);
       }
+      loadWatchdog.cancel();
     }
   }
 
@@ -272,6 +499,8 @@ class AudioPlayerService {
     );
 
     _queue = List.unmodifiable(songs);
+    _prefetchedForIndex = null;
+    _notifyQueueChanged();
 
     await _loadAndPlaySong(safeIndex, token);
   }
@@ -302,6 +531,8 @@ class AudioPlayerService {
     AppLogger.info('playNow called: ${song.meta.title}');
 
     _queue = List.unmodifiable([song]);
+    _prefetchedForIndex = null;
+    _notifyQueueChanged();
 
     await _loadAndPlaySong(0, token);
   }
@@ -313,6 +544,27 @@ class AudioPlayerService {
       meta: NowPlaying(title: name, artist: 'Offline', imageUrl: ''),
     );
     await playNow(song);
+  }
+
+  /// Play a list of local files, starting at the specified index
+  Future<void> playLocalFiles({
+    required List<({String path, String name})> files,
+    required int startIndex,
+  }) async {
+    if (files.isEmpty) {
+      AppLogger.warning('Cannot play from empty local files list');
+      return;
+    }
+
+    final queued = files.map((file) {
+      return QueuedSong(
+        id: file.path,
+        isLocal: true,
+        meta: NowPlaying(title: file.name, artist: 'Offline', imageUrl: ''),
+      );
+    }).toList();
+
+    await playFromList(songs: queued, startIndex: startIndex);
   }
 
   Future<void> playFromCache(Map<String, dynamic> song) async {
@@ -332,12 +584,25 @@ class AudioPlayerService {
     }
   }
 
-  Future<void> skipNext() async {
+  Future<void> skipNext() {
+    final inFlight = _skipNextInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _skipNextInternal();
+    _skipNextInFlight = future;
+    return future.whenComplete(() {
+      if (identical(_skipNextInFlight, future)) {
+        _skipNextInFlight = null;
+      }
+    });
+  }
+
+  Future<void> _skipNextInternal() async {
     if (_queue.isEmpty) return;
 
     final nextIndex = _currentIndex + 1;
 
-    _maybeExtendYoutubeQueue();
+    unawaited(_maybeExtendYoutubeQueue());
 
     if (nextIndex >= _queue.length) {
       if (_player.loopMode == LoopMode.all) {
@@ -381,6 +646,10 @@ class AudioPlayerService {
     final current = _queue[_currentIndex];
     if (!current.id.startsWith('yt:')) return;
 
+    // Only fetch suggestions when streaming (YTM) is enabled
+    await StreamingPreferences.load();
+    if (!StreamingPreferences.useYoutube) return;
+
     final remaining = _queue.length - _currentIndex - 1;
     if (remaining > 5) return;
 
@@ -392,7 +661,7 @@ class AudioPlayerService {
       final existingIds = _queue.map((s) => s.id).toSet();
 
       final additions = related
-          ?.where((s) => !existingIds.contains(s.id))
+          .where((s) => !existingIds.contains(s.id))
           .map(
             (s) => QueuedSong(
               id: s.id,
@@ -405,9 +674,10 @@ class AudioPlayerService {
           )
           .toList();
 
-      if (additions == null || additions.isEmpty) return;
+      if (additions.isEmpty) return;
 
       _queue = List<QueuedSong>.from(_queue)..addAll(additions);
+      _notifyQueueChanged();
       AppLogger.info(
         'Added ${additions.length} YouTube recommendations to the queue',
       );
@@ -488,6 +758,78 @@ class AudioPlayerService {
     _recentlyPlayedSubject.add([]);
   }
 
+  /// Remove a song from the queue by its ID
+  /// Returns true if the song was found and removed, false otherwise
+  Future<bool> removeSongFromQueue(String songId) async {
+    final indexToRemove = _queue.indexWhere((song) => song.id == songId);
+    if (indexToRemove == -1) return false;
+
+    final wasCurrentSong = indexToRemove == _currentIndex;
+    final newQueue = List<QueuedSong>.from(_queue);
+    newQueue.removeAt(indexToRemove);
+
+    if (newQueue.isEmpty) {
+      await stopAndClearNowPlaying();
+      return true;
+    }
+
+    // Update the queue
+    _queue = List.unmodifiable(newQueue);
+    _prefetchedForIndex = null;
+    _notifyQueueChanged();
+
+    // Update current index if needed
+    int newIndex = _currentIndex;
+    if (wasCurrentSong) {
+      if (newIndex >= newQueue.length) {
+        newIndex = newQueue.length - 1;
+      }
+      // Stop current playback
+      ++_playToken;
+      await _player.stop();
+      _trackLoading.add(false);
+
+      // Play the new current song
+      if (newIndex >= 0 && newIndex < newQueue.length) {
+        _currentIndex = newIndex;
+        _currentIndexSubject.add(newIndex);
+        final token = ++_playToken;
+        await _loadAndPlaySong(newIndex, token);
+      } else {
+        _currentIndex = 0;
+        _currentIndexSubject.add(null);
+        _nowPlaying.add(null);
+      }
+    } else {
+      if (indexToRemove < _currentIndex) {
+        newIndex = _currentIndex - 1;
+        _currentIndex = newIndex;
+        _currentIndexSubject.add(newIndex);
+      }
+      // Always notify so UI rebuilds 'Up Next'
+      _notifyQueueChanged();
+    }
+
+    return true;
+  }
+
+  Future<void> stopAndClearNowPlaying() async {
+    ++_playToken;
+    _queue = [];
+    _notifyQueueChanged();
+    _currentIndex = 0;
+    _prefetchedForIndex = null;
+    _skipNextInFlight = null;
+    _youtubeRetryCount.clear();
+    _transientRetryCount.clear();
+
+    _currentIndexSubject.add(null);
+    _nowPlaying.add(null);
+    _trackLoading.add(false);
+
+    await _player.stop();
+  }
+
   Map<String, int> getStreamCacheStats() {
     final now = DateTime.now();
     int fresh = 0;
@@ -525,10 +867,12 @@ class AudioPlayerService {
   }
 
   Future<void> dispose() async {
+    await _positionSub?.cancel();
     await _player.dispose();
     await _nowPlaying.close();
     await _recentlyPlayedSubject.close();
     await _currentIndexSubject.close();
+    await _queueVersion.close();
     await _trackLoading.close();
   }
 }

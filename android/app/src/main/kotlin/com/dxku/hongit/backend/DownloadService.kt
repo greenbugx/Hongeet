@@ -13,6 +13,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class DownloadService : Service() {
 
@@ -33,22 +37,24 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val url = intent?.getStringExtra("url") ?: return START_NOT_STICKY
         val title = intent.getStringExtra("title") ?: "Downloading"
+        val requestId = intent.getStringExtra("requestId")
 
         scope.launch {
-            startDownload(title, url)
+            startDownload(title, url, requestId)
         }
 
         return START_STICKY
     }
 
-    private suspend fun startDownload(title: String, url: String) {
+    private suspend fun startDownload(title: String, url: String, requestId: String?) {
+        var success = false
         try {
             // Create download directory
             val downloadDir = File(
                 Environment.getExternalStoragePublicDirectory(
                     Environment.DIRECTORY_DOWNLOADS
                 ),
-                "Hongit"
+                "Hongeet"
             )
 
             if (!downloadDir.exists()) {
@@ -81,18 +87,23 @@ class DownloadService : Service() {
                 val outputFile = File(downloadDir, "$safeTitle.m4a")
                 val outputStream = FileOutputStream(outputFile)
 
-                val buffer = ByteArray(8192)
+                // Larger buffer = fewer syscalls, faster I/O (256 KB)
+                val buffer = ByteArray(256 * 1024)
                 var bytesRead: Int
                 var totalRead = 0L
+                var lastProgressUpdate = 0
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                     outputStream.write(buffer, 0, bytesRead)
                     totalRead += bytesRead
 
-                    // Update progress
+                    // Throttle progress: only update every ~2% to avoid flooding the notification manager
                     if (totalBytes > 0) {
                         val progress = ((totalRead * 100) / totalBytes).toInt()
-                        updateNotification(safeTitle, progress, false)
+                        if (progress >= lastProgressUpdate + 2 || progress >= 100) {
+                            lastProgressUpdate = progress
+                            updateNotification(safeTitle, progress, false)
+                        }
                     }
                 }
 
@@ -103,6 +114,7 @@ class DownloadService : Service() {
                 updateNotification("Completed: $safeTitle", 100, true)
                 showCompletedNotification("Completed: $safeTitle")
                 Log.i("DownloadService", "Download completed: ${outputFile.absolutePath}")
+                success = true
             }
 
         } catch (e: Exception) {
@@ -110,6 +122,7 @@ class DownloadService : Service() {
             updateNotification("Failed: $title", 0, true)
             showCompletedNotification("Failed: $title")
         } finally {
+            completePending(requestId, success)
             // final notification in the shade.
             delay(3000)
             try {
@@ -128,7 +141,7 @@ class DownloadService : Service() {
         done: Boolean
     ): Notification {
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Hongit Download")
+            .setContentTitle("Hongeet Download")
             .setContentText(text)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
@@ -181,7 +194,7 @@ class DownloadService : Service() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Hongit Download")
+            .setContentTitle("Hongeet Download")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setOngoing(false)
@@ -197,10 +210,30 @@ class DownloadService : Service() {
         private const val FOREGROUND_ID = 1001
         private const val COMPLETED_NOTIFICATION_ID = 1002
 
-        fun start(context: Context, title: String, url: String) {
+        data class Pending(val latch: CountDownLatch, val success: AtomicReference<Boolean?> = AtomicReference(null))
+
+        private val pendingCompletions = ConcurrentHashMap<String, Pending>()
+
+        fun registerPending(requestId: String): Pending {
+            val pending = Pending(CountDownLatch(1))
+            pendingCompletions[requestId] = pending
+            return pending
+        }
+
+        fun completePending(requestId: String?, success: Boolean) {
+            requestId?.let { id ->
+                pendingCompletions.remove(id)?.let { pending ->
+                    pending.success.set(success)
+                    pending.latch.countDown()
+                }
+            }
+        }
+
+        fun start(context: Context, title: String, url: String, requestId: String? = null) {
             val intent = Intent(context, DownloadService::class.java).apply {
                 putExtra("title", title)
                 putExtra("url", url)
+                requestId?.let { putExtra("requestId", it) }
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

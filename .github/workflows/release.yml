@@ -1,0 +1,94 @@
+name: "Build and Release"
+
+on: 
+  workflow_dispatch:
+    branches: main
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    # env:
+    #   BUILD_OFFSET: 10
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.7'
+          channel: 'stable' 
+
+      - name: Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: Extract version from pubspec.yaml
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # - name: Compute build number
+      #   run: |
+      #     BUILD_NUMBER=$((BUILD_OFFSET + GITHUB_RUN_NUMBER))
+      #     echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+
+      - name: Create keystore file
+        run: |
+          echo "${{ secrets.ANDROID_RELEASE_KEY }}" | base64 --decode > android/hongeet.jks
+
+      - name: Create Keystore properties file
+        run: |
+          echo storeFile=../hongeet.jks > android/key.properties
+          echo keyPassword=${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }} >> android/key.properties
+          echo storePassword=${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }} >> android/key.properties
+          echo keyAlias=${{ secrets.ANDROID_KEY_ALIAS }} >> android/key.properties
+
+      - name: Build Universal APK
+        run: flutter build apk --release
+
+      - name: Build ARM Split APKs
+        run: flutter build apk --release --split-per-abi --target-platform android-arm64,android-arm
+
+      - name: Verify Sign
+        run: |
+          BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -r | head -n 1)
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify build/app/outputs/flutter-apk/app-release.apk
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
+      - name: Rename APK files
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/hongeet_v${VERSION}_universal.apk
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             build/app/outputs/flutter-apk/hongeet_v${VERSION}_armeabi-v7a.apk
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             build/app/outputs/flutter-apk/hongeet_v${VERSION}_arm64-v8a.apk
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release
+          path: |
+            build/app/outputs/flutter-apk/hongeet_v*_universal.apk
+            build/app/outputs/flutter-apk/hongeet_v*_armeabi-v7a.apk
+            build/app/outputs/flutter-apk/hongeet_v*_arm64-v8a.apk
+      
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            build/app/outputs/flutter-apk/hongeet_v${{ env.VERSION }}_universal.apk
+            build/app/outputs/flutter-apk/hongeet_v${{ env.VERSION }}_armeabi-v7a.apk
+            build/app/outputs/flutter-apk/hongeet_v${{ env.VERSION }}_arm64-v8a.apk
+          tag: v${{ env.VERSION }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: false

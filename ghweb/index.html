@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Hongeet - Free Music Player & Downloader</title>
+    <meta name="title" content="Hongeet - Free Music Player & Downloader" />
+    <meta 
+      name="description" 
+      content="Download Hongeet, a free music player app featuring seamless background playback, high-quality downloads, and YouTube plus Saavn support. Get the APK now!" 
+    />
+    <meta name="keywords" content="free music player, background music player, download music apk, Hongeet app, open source music player" />
+    
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="GreenBugX(0xNA)" />
+    <meta name="theme-color" content="#000000" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://github.com/greenbugx/Hongeet" />
+    <meta property="og:title" content="Free Music Player & Downloader - Hongeet" />
+    <meta property="og:description" content="Download Hongeet, a free music player app featuring seamless background playback, high-quality downloads, and YouTube plus Saavn support. Get the APK now!" />
+    <meta property="og:image" content="./assets/icon_fg.png" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Free Music Player & Downloader - Hongeet" />
+    <meta name="twitter:description" content="Download Hongeet, a free music player app featuring seamless background playback, high-quality downloads, and YouTube plus Saavn support. Get the APK now!" />
+    <meta name="twitter:image" content="./assets/icon_fg.png" />
+
+    <link rel="icon" href="./assets/icon_fg.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Satisfy&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="spotlight" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar container reveal">
+      <a href="#home" class="brand">
+        <img src="./assets/icon_fg.png" alt="Hongeet logo" />
+        <span>Hongeet</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="#open-source">Open Source</a>
+      </nav>
+    </header>
+
+    <main id="home">
+      <section class="hero container">
+        <div class="hero-copy reveal">
+          <!-- <p class="eyebrow">Hongeet MUSIC</p> -->
+          <h1>Play. Flow. Repeat</h1>
+          <p class="lead">A simple yet powerful music player designed for seamless streaming of your favorite songs &#9835;</p>
+          <div class="hero-actions">
+            <a id="downloadBtn" class="btn btn-primary" href="#download" target="_blank">Get APK</a>
+            <a
+              class="btn btn-ghost"
+              href="https://github.com/greenbugx/Hongeet"
+              target="_blank"
+              rel="noopener"
+              >Give a &starf;</a
+            >
+          </div>
+          <p class="meta">Latest: <code id="latestVersion">v1.3.2+12</code></p>
+        </div>
+
+        <div class="hero-stage reveal">
+          <canvas id="heroCanvas" aria-hidden="true"></canvas>
+          <div class="lens" aria-hidden="true">
+            <img src="./assets/icon_fg.png" alt="Hongeet icon" id="heroIcon" />
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="container section">
+        <h2 class="reveal">Features</h2>
+        <ul class="feature-list reveal">
+          <li>Background playback</li>
+          <li>YouTube + Saavn support</li>
+          <li>Customizable UI</li>
+          <li>Free Downloads in High Quality</li>
+        </ul>
+      </section>
+
+      <section id="download" class="container section">
+        <div class="reveal">
+          <h2>Download</h2>
+          <p class="sub">Latest stable build.</p>
+          <a class="btn btn-primary" href="https://sourceforge.net/projects/hongeet/files/latest/download" id="apkLink" target="_blank">Download APK</a>
+          <p class="endpoint">check <code>/version.json</code> for version information</p>
+        </div>
+      </section>
+
+      <section id="open-source" class="container section">
+        <div class="reveal">
+          <h2>Open Source</h2>
+          <p class="sub">Built in public.</p>
+          <div class="link-row">
+            <a
+              href="https://github.com/greenbugx/Hongeet"
+              target="_blank"
+              rel="noopener"
+              >Repository</a
+            >
+            <a
+              href="https://github.com/greenbugx/Hongeet/releases"
+              target="_blank"
+              rel="noopener"
+              >Releases</a
+            >
+            <a
+              href="https://github.com/greenbugx/Hongeet/issues"
+              target="_blank"
+              rel="noopener"
+              >Issues</a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="container footer">
+      <p>Hongeet - &copy; GreenBugX(0xNA) 2026</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+    <script src="./script.js"></script>
+  </body>
+</html>

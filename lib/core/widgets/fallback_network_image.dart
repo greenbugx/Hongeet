@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/streaming_preferences.dart';
+
 class FallbackNetworkImage extends StatelessWidget {
   final List<String> urls;
   final double? width;
@@ -31,6 +33,11 @@ class FallbackNetworkImage extends StatelessWidget {
 
   Widget _buildAt(int index) {
     if (index >= urls.length) {
+      return fallback;
+    }
+
+    // Only load artwork from network when streaming is enabled
+    if (!StreamingPreferences.isStreamingEnabled) {
       return fallback;
     }
 

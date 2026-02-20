@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+Disallow: /version.json
+Disallow: /version-dev.json
+
+Sitemap: https://greenbugx.github.io/Hongeet/sitemap.xml

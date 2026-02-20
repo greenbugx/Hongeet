@@ -18,6 +18,12 @@ android {
     namespace = "com.dxku.hongit"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    dependenciesInfo {
+        // Disables dependency metadata when building APKs (useful for IzzyOnDroid/F-Droid)
+        includeInApk = false
+        // Disables dependency metadata when building Android App Bundles
+        includeInBundle = false
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -52,17 +58,15 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        ndk {
-            abiFilters.add("armeabi-v7a")
-            abiFilters.add("arm64-v8a")
-//            abiFilters.add("x86")
-//            abiFilters.add("x86_64")
-        }
+
     }
 
     buildTypes {
         getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            
             isMinifyEnabled = true
             isShrinkResources = true
 
@@ -97,16 +101,9 @@ android {
     }
 }
 
-val youtubedlAndroid = "0.18.1"
-
-//repositories {
-//    mavenCentral()
-//}
-
 dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("io.github.junkfood02.youtubedl-android:library:${youtubedlAndroid}")
 }
 
 flutter {

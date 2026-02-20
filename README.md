@@ -1,182 +1,135 @@
-![HONGEET](assets/banner/latest_banner.png)
+<div align="center">
 
-**<h1 align=center> HONGEET - সংগীত 🎧</h1>**
+  <img src="assets/banner/latest_banner.png" alt="Hongeet Banner" width="100%" />
 
-> A lightweight, high-quality music streaming & offline player — built with love for speed, control, and clean design.
+  # HONGEET - সংগীত 🎧
 
-<p align="center">
-  <img src="https://skillicons.dev/icons?i=flutter,dart,kotlin,git" /><br>
-  <img alt="GitHub Release" src="https://img.shields.io/github/v/release/greenbugx/Hongeet?display_name=release&style=for-the-badge&color=000000" />
-  <img alt="GitHub License" src="https://img.shields.io/github/license/greenbugx/Hongeet?display_name=release&style=for-the-badge&color=ffffff" /> <br>
-  <a href="https://sourceforge.net/projects/hongeet/files/latest/download"><img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width=276 height=48 srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x"></a>
-</p>
+  **A lightweight music player with offline playback and optional third-party streaming.**<br>
+  *Built with love for speed, control, and clean design.*
+
+  <p>
+    <a href="https://flutter.dev">
+      <img src="https://skillicons.dev/icons?i=flutter,dart,kotlin,git" height="40" />
+    </a>
+  </p>
+
+  [![GitHub Release](https://img.shields.io/github/v/release/greenbugx/Hongeet?style=for-the-badge&color=white)](https://github.com/greenbugx/Hongeet/releases)
+  [![License](https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=black)](LICENSE)
+  [![Downloads](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white)](https://sourceforge.net/projects/hongeet/)
+
+  <a href="https://sourceforge.net/projects/hongeet/files/latest/download">
+    <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width=300 srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
+  </a>
+
+</div>
 
 ---
 
-_HONGEET is a **local-first music app** that lets you  
-**stream** and **download** music with maximum control — no ads, no trackers, no nonsense._
+> [!IMPORTANT]
+> **Active Development:** Hongeet is currently in active development. Expect bugs, crashes, or missing features.  
+> If you encounter issues, please report them in the [Issues Tab](https://github.com/greenbugx/Hongeet/issues).
 
-Built for people who care about **audio quality**, **performance**, and **ownership**.
+---
 
+<h1 align=center> 📖 What is HONGEET? </h1>
 
-<h2 align=center> 📖 Whats HONGEET? </h2>
-
-HONGEET was built to solve a simple problem:
-
+**HONGEET** was built to solve a simple problem:<br> 
 > *“Why is it so hard to just listen to music the way **I** want?”*
 
-Most music apps:
-- lock downloads behind paywalls
-- restrict quality
-- track users aggressively
-- break when you go offline
+Most modern music apps lock downloads behind paywalls, track your data aggressively, or break completely when you go offline. **HONGEET does the opposite.**
 
-HONGEET does the opposite.
+Hongeet is a music player that supports **offline local audio playback** and **optional streaming from third-party services such as YouTube Music and JioSaavn** — giving you full control over how and where you listen.
 
-It runs a **local backend inside the app**, streams directly from the source, and lets **you** decide what happens to your music.
+### ✨ Key Highlights
+| 🎶 Streaming | 📥 Downloads |
+| :--- | :--- |
+| • High-quality audio streaming from supported services<br>• Smart URL caching (fast repeats)<br>• Gapless playback & Queue management | • Download directly to device storage<br>• YT Extraction (via `youtube_explode_dart`)<br>• Fully offline playback |
 
----
-
-<h3 align=center> 📸 Screenshots </h3>
-
-<p align="center">
-  <img src="assets/screenshots/1.jpg" width="260" />
-  <img src="assets/screenshots/2.jpg" width="260" />
-  <img src="assets/screenshots/3.jpg" width="260" />
-</p>
-<p align="center">
-  <img src="assets/screenshots/4.jpg" width="260" />
-  <img src="assets/screenshots/5.jpg" width="260" />
-  <img src="assets/screenshots/6.jpg" width="260" />
-</p>
+| 🧠 Smart Playback | 🖤 UI / UX |
+| :--- | :--- |
+| • History & Recents<br>• Loop modes (Off / All / One)<br>• Background playback service | • Glassmorphism-inspired design<br>• Smooth animations<br>• Full-screen & Mini player support |
 
 ---
 
-<h2 align="center">✨ Features</h2>
+<h2 align=center> 📸 Screenshots </h2>
 
 <div align="center">
-  <h3>🎶 Streaming</h3>
-  High-quality audio streaming<br>
-  Smart URL caching (faster repeat plays)<br>
-  Gapless playback with queue management
-</div>
-
-<br>
-
-<div align="center">
-  <h3>📥 Downloads</h3>
-  Download songs directly to device storage<br>
-  Uses yt-dlp under the hood<br>
-  Offline playback from local files
-</div>
-
-<br>
-
-<div align="center">
-  <h3>🧠 Smart Playback</h3>
-  Recently Played history<br>
-  Loop modes (off / all / one)
-</div>
-
-<br>
-
-<div align="center">
-  <h3>🖤 UI / UX</h3>
-  Glassmorphism-inspired design<br>
-  Smooth animations<br>
-  Full-screen player with blur background<br>
-  Mini player support
-</div>
-
-<br>
-
-<div align="center">
-  <h3>🔐 Local-First</h3>
-  No external backend servers<br>
-  Everything runs on-device<br>
-  Your music stays with you
-</div>
-
-<hr>
-
-<h2 align="center">🚧 Upcoming Updates</h2>
-
-<div align="center">
-  🔍 YouTube Music as alternate source<br>
-  🎨 More theming options
+  <table>
+    <tr>
+      <td><img src="assets/screenshots/01.jpg" width="220" /></td>
+      <td><img src="assets/screenshots/02.jpg" width="220" /></td>
+      <td><img src="assets/screenshots/03.jpg" width="220" /></td>
+    </tr>
+    <tr>
+      <td><img src="assets/screenshots/04.jpg" width="220" /></td>
+      <td><img src="assets/screenshots/05.jpg" width="220" /></td>
+      <td><img src="assets/screenshots/06.jpg" width="220" /></td>
+    </tr>
+  </table>
 </div>
 
 ---
 
-<h2 align=center> 🤝 Contributing </h2>
+## 🔐 Permissions
 
-Contributions are welcome.
+HONGEET asks for permissions strictly needed for playback, downloads, and local media access.
 
-You can help by:
+| Permission | Reason |
+| :--- | :--- |
+| `INTERNET` | For streaming audio, metadata fetching, and optional update checks. |
+| `POST_NOTIFICATIONS` <br>*(Android 13+)* | For playback controls in notification/lock screen and download notifications. |
+| `FOREGROUND_SERVICE`<br>`FOREGROUND_SERVICE_MEDIA_PLAYBACK`<br>`WAKE_LOCK` | To keep background playback stable while the app is minimized or the screen is locked. |
+| `FOREGROUND_SERVICE_DATA_SYNC` | To support background data tasks such as download/stream sync operations. |
+| `READ_MEDIA_AUDIO`<br>*(Android 13+)* | To read audio files from device storage (downloads/local tracks). |
+| `READ_EXTERNAL_STORAGE`<br>*(Android 12 and below)* | Backward-compatible local audio access on older Android versions. |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | **Optional:** Used to open battery optimization settings on aggressive OEM devices. |
+| `MANAGE_EXTERNAL_STORAGE`<br>*(Android 11+)* | **Optional:** Used only if the user opts in to manage local audio/downloaded songs directly from the app. |
 
-- Reporting bugs
-- Improving UI/UX
-- Optimizing performance
-- Reviewing code
-
-### How to contribute?
-
-- Fork the repo
-- Create a feature branch
-- Commit clean, meaningful changes
-- Open a Pull Request
-
-_For detailed info about Contributing to this project, please check [CONTRIBUTING](CONTRIBUTING.md)
+> [!NOTE]
+> HONGEET **does not** request contacts, location, microphone, or camera permissions.
 
 ---
 
-<h2 align=center> ⚠️ Disclaimer </h2>
+## 🤝 Contributing
 
-_HONGEET is a personal / educational project._
+Contributions are welcome! Whether it's fixing bugs, improving the UI, or optimizing performance.
 
-- It does not host or distribute copyrighted content
-- All media is fetched directly from third-party sources
-- Users are responsible for how they use the app
-- This project is not affiliated with JioSaavn or YouTube
+1.  **Fork** the repository.
+2.  **Create** a feature branch.
+3.  **Commit** clean, meaningful changes.
+4.  **Open** a Pull Request.
 
-_If you are a rights holder and believe something is wrong, please open an issue._
-
----
-
-<h2 align=center> 📜 License </h2>
-
-_This project is licensed under the GNU-GPLv3 or later. Check [LICENSE](LICENSE) for License info._
-
-_Meanwhile you are free to:_
-
-- use
-- modify
-- distribute
-
-_With **PROPER ATTRIBUTION**_
-
-<h2 align=center> But </h2>
-
-- Copied/Modified version of this software can not be used for 'non-free' and profit purposes.
-- You can not publish copied/modified version of this app on closed source app repository
-  like PlayStore/AppStore.
+_For detailed info, please check [CONTRIBUTING.md](CONTRIBUTING.md)_
 
 ---
 
-<h2 align=center> ❤️ Credits & Thanks </h2>
+## ❤️ Credits & Tech Stack
 
-Huge respect and thanks to:
+This project wouldn’t exist without these amazing open-source libraries:
 
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — the backbone of modern media downloading
-- [youtubedl-android](https://github.com/yausername/youtubedl-android) — making yt-dlp usable on Android
-- [Saavn API(Unofficial)](https://github.com/sumitkolhe/jiosaavn-api) — for Jio Saavn metadata & streaming access
-
-This project wouldn’t exist without them.
+* **youtube_explode_dart** — YouTube stream extraction in pure Dart  
+* **JioSaavn API (Unofficial)** — metadata & streaming access from JioSaavn
 
 ---
 
-_<h5 align=center> HONGEET started as an experiment. </h5>_
+> [!WARNING]
+> **Disclaimer:** Hongeet is a personal project built for learning. It is not intended for commercial use. **Do not use this app to distribute copyrighted content.** If you are a rights holder and believe an issue exists, please open an issue immediately.
 
-_<h4 align=center> It became a challenge. </h4>_
+---
 
-_<h2 align=center> Then it became an app. 🚀🎧 </h2>_
+<div align="center">
+
+  ## 📜 License
+  *Licensed under GNU-AGPLv3.* [View License](LICENSE)
+
+  <br>
+
+  <a href="https://www.buymeacoffee.com/dxku" target="_blank">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" width="180" />
+  </a>
+
+  <br><br>
+
+  *Now don't cry listening to sad songs :)*
+
+</div>

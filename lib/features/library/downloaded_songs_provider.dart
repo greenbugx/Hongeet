@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:path/path.dart' as p;
 import '../../core/utils/app_logger.dart';
 
@@ -10,8 +11,19 @@ class DownloadedSong {
 }
 
 class DownloadedSongsProvider {
+  static final StreamController<int> _changes =
+      StreamController<int>.broadcast();
+  static int _changeTick = 0;
+
+  static Stream<int> get changes => _changes.stream;
+
+  static void _notifyChanged() {
+    if (_changes.isClosed) return;
+    _changes.add(++_changeTick);
+  }
+
   static Future<List<DownloadedSong>> load() async {
-    final dir = Directory('/storage/emulated/0/Download/Hongit');
+    final dir = Directory('/storage/emulated/0/Download/Hongeet');
 
     if (!await dir.exists()) return [];
 
@@ -30,6 +42,7 @@ class DownloadedSongsProvider {
       final file = File(path);
       if (await file.exists()) {
         await file.delete();
+        _notifyChanged();
       }
     } catch (e) {
       AppLogger.warning('Error deleting file: $e', error: e);

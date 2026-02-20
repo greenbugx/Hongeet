@@ -14,6 +14,8 @@ class YoutubeApi {
   static const Duration _searchFallbackTimeout = Duration(seconds: 7);
   static const Duration _relatedTimeout = Duration(seconds: 10);
   static const Duration _relatedFallbackTimeout = Duration(seconds: 8);
+  static const Duration _chartsTimeout = Duration(seconds: 10);
+  static const Duration _chartSongsTimeout = Duration(seconds: 12);
   static const Duration _ytmBootstrapTimeout = Duration(seconds: 6);
   static const Duration _ytmSearchTimeout = Duration(seconds: 8);
   static const Duration _ytmContinuationTimeout = Duration(seconds: 7);
@@ -29,9 +31,18 @@ class YoutubeApi {
       '(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
   static const Duration _ytmBootstrapTtl = Duration(hours: 6);
   static const int _maxYtmPages = 3;
+  static const int _maxChartArtworkFallbackLookups = 10;
+  static const Duration _trendingAlbumsCacheTtl = Duration(minutes: 10);
 
   static final Map<String, _TimedSongsCache> _searchCache = {};
   static final Map<String, _TimedSongsCache> _relatedCache = {};
+  static final Map<String, _TimedChartsCache> _chartsCache = {};
+  static final Map<String, _TimedSongsCache> _chartSongsCache = {};
+  static final Map<String, _TimedAlbumsCache> _albumsCache = {};
+  static final Map<String, _TimedArtistsCache> _artistsCache = {};
+  static final Map<String, _TimedSongsCache> _artistSongsCache = {};
+  static final Map<String, String> _sessionSongArtworkOverrides = {};
+  static const int _maxSessionSongArtworkOverrides = 2000;
   static _YtmBootstrapCache? _ytmBootstrapCache;
   static Future<_YtmBootstrapCache>? _ytmBootstrapInFlight;
 
@@ -58,6 +69,20 @@ class YoutubeApi {
       ytmSongs = await _searchViaYtm(query: normalized, take: safeTake);
     } catch (e) {
       ytmError = e;
+    }
+
+    // Secondary YTM pass without fixed songs params so still prefer YTM before falling back to generic YouTube search.
+    if (ytmSongs.isEmpty) {
+      try {
+        ytmSongs = await _searchViaYtm(
+          query: normalized,
+          take: safeTake,
+          useSongsParams: false,
+          requireSongsShelf: false,
+        );
+      } catch (e) {
+        ytmError ??= e;
+      }
     }
 
     List<SaavnSong> fallbackSongs = const [];
@@ -90,6 +115,8 @@ class YoutubeApi {
   static Future<List<SaavnSong>> _searchViaYtm({
     required String query,
     required int take,
+    bool useSongsParams = true,
+    bool requireSongsShelf = true,
   }) async {
     final bootstrap = await _getYtmBootstrap();
     final out = <SaavnSong>[];
@@ -98,13 +125,18 @@ class YoutubeApi {
     Map<String, dynamic>? payload = await _postYtmSearch(
       bootstrap: bootstrap,
       query: query,
+      useSongsParams: useSongsParams,
       timeout: _ytmSearchTimeout,
     );
     var continuation = '';
     var pageIndex = 0;
 
     while (payload != null && out.length < take && pageIndex < _maxYtmPages) {
-      final page = _extractYtmSongsPage(payload, initialPage: pageIndex == 0);
+      final page = _extractYtmSongsPage(
+        payload,
+        initialPage: pageIndex == 0,
+        requireSongsShelf: requireSongsShelf,
+      );
       for (final song in page.songs) {
         if (!seen.add(song.id)) continue;
         out.add(song);
@@ -118,6 +150,7 @@ class YoutubeApi {
         bootstrap: bootstrap,
         query: query,
         continuation: continuation,
+        useSongsParams: useSongsParams,
         timeout: _ytmContinuationTimeout,
       );
       pageIndex++;
@@ -130,6 +163,7 @@ class YoutubeApi {
     required _YtmBootstrapCache bootstrap,
     required String query,
     String? continuation,
+    required bool useSongsParams,
     required Duration timeout,
   }) async {
     final apiKey = bootstrap.apiKey.isNotEmpty
@@ -158,9 +192,11 @@ class YoutubeApi {
     };
     if (continuation != null && continuation.isNotEmpty) {
       body['continuation'] = continuation;
-    } else {
+    } else if (useSongsParams) {
       body['query'] = query;
       body['params'] = _ytmSongsParams;
+    } else {
+      body['query'] = query;
     }
 
     final headers = <String, String>{
@@ -192,9 +228,70 @@ class YoutubeApi {
     return decoded;
   }
 
+  static Future<Map<String, dynamic>> _postYtmBrowse({
+    required _YtmBootstrapCache bootstrap,
+    required String browseId,
+    required Duration timeout,
+  }) async {
+    final apiKey = bootstrap.apiKey.isNotEmpty
+        ? bootstrap.apiKey
+        : _fallbackYtmApiKey;
+    final clientVersion = bootstrap.clientVersion.isNotEmpty
+        ? bootstrap.clientVersion
+        : _fallbackYtmClientVersion;
+
+    final uri = Uri.parse(
+      'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false&key=$apiKey',
+    );
+
+    final client = <String, dynamic>{
+      'clientName': _ytmClientNameBody,
+      'clientVersion': clientVersion,
+      'hl': bootstrap.hl.isNotEmpty ? bootstrap.hl : 'en',
+      'gl': bootstrap.gl.isNotEmpty ? bootstrap.gl : 'US',
+    };
+    if (bootstrap.visitorData.isNotEmpty) {
+      client['visitorData'] = bootstrap.visitorData;
+    }
+
+    final body = <String, dynamic>{
+      'context': <String, dynamic>{'client': client},
+      'browseId': browseId,
+    };
+
+    final headers = <String, String>{
+      'Accept': '*/*',
+      'Content-Type': 'application/json',
+      'Origin': 'https://music.youtube.com',
+      'Referer': 'https://music.youtube.com/',
+      'User-Agent': _ytmUserAgent,
+      'X-Youtube-Client-Name': _ytmClientNameHeader,
+      'X-Youtube-Client-Version': clientVersion,
+    };
+    if (bootstrap.visitorData.isNotEmpty) {
+      headers['X-Goog-Visitor-Id'] = bootstrap.visitorData;
+    }
+
+    final response = await http
+        .post(uri, headers: headers, body: jsonEncode(body))
+        .timeout(timeout);
+
+    if (response.statusCode != 200) {
+      throw StateError('YTM browse failed with HTTP ${response.statusCode}');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw StateError('YTM browse returned invalid payload');
+    }
+
+    return decoded;
+  }
+
   static _YtmSongsPage _extractYtmSongsPage(
     Map<String, dynamic> payload, {
     required bool initialPage,
+    required bool requireSongsShelf,
   }) {
     if (!initialPage) {
       final continuationContents = _asMap(payload['continuationContents']);
@@ -248,7 +345,9 @@ class YoutubeApi {
         songsShelf = shelf;
         break;
       }
-      songsShelf ??= shelf;
+      if (!requireSongsShelf) {
+        songsShelf ??= shelf;
+      }
     }
 
     if (songsShelf == null) {
@@ -290,7 +389,13 @@ class YoutubeApi {
 
     final preferredThumb = _extractYtmThumbnail(renderer);
     final imageUrl = YoutubeThumbnailUtils.isYtmArtworkUrl(preferredThumb)
-        ? preferredThumb!.trim()
+        ? (() {
+            final candidates = YoutubeThumbnailUtils.candidateUrls(
+              imageUrl: preferredThumb,
+            );
+            if (candidates.isNotEmpty) return candidates.first;
+            return preferredThumb!.trim();
+          })()
         : YoutubeThumbnailUtils.bestInitialUrl(
             videoId: videoId,
             preferredUrl: preferredThumb,
@@ -517,6 +622,755 @@ class YoutubeApi {
     return null;
   }
 
+  static List<YtmChart> _parseYtmCharts(
+    Map<String, dynamic> payload, {
+    required int take,
+  }) {
+    final renderers = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicTwoRowItemRenderer', renderers);
+
+    final charts = <YtmChart>[];
+    final seenChartKeys = <String>{};
+
+    for (final renderer in renderers) {
+      final title = _textFromRuns(_asMap(renderer['title'])).trim();
+      if (title.isEmpty) continue;
+
+      final endpoint =
+          _extractChartNavigationEndpoint(renderer) ??
+          _asMap(renderer['navigationEndpoint']);
+      final watch = _asMap(endpoint?['watchEndpoint']);
+      final watchPlaylist = _asMap(endpoint?['watchPlaylistEndpoint']);
+      final browse = _asMap(endpoint?['browseEndpoint']);
+
+      String playlistId =
+          (watch?['playlistId'] ?? watchPlaylist?['playlistId'] ?? '')
+              .toString()
+              .trim();
+      String browseId = (browse?['browseId'] ?? '').toString().trim();
+      if (playlistId.isEmpty &&
+          browseId.startsWith('VL') &&
+          browseId.length > 2) {
+        playlistId = browseId.substring(2);
+      } else if (playlistId.isEmpty && browseId.isNotEmpty) {
+        // Some charts come with browse-only IDs (no explicit playlistId).
+        playlistId = browseId;
+      }
+      if (playlistId.isEmpty) continue;
+      if (browseId.isEmpty) browseId = _toYtmBrowseId(playlistId);
+
+      // Keep chart variants with different titles, even if they reuse playlist IDs.
+      final idKey = '${browseId.toLowerCase()}::${title.toLowerCase()}';
+      if (!seenChartKeys.add(idKey)) continue;
+
+      final subtitle = _textFromRuns(_asMap(renderer['subtitle'])).trim();
+      final artworkUrl =
+          _extractLargestThumbnail(
+            _asList(
+              _asMap(
+                _asMap(
+                  _asMap(
+                    renderer['thumbnailRenderer'],
+                  )?['musicThumbnailRenderer'],
+                )?['thumbnail'],
+              )?['thumbnails'],
+            ),
+          ) ??
+          '';
+
+      final chart = YtmChart(
+        playlistId: playlistId,
+        browseId: browseId,
+        title: title,
+        subtitle: subtitle.isEmpty ? 'Chart - YouTube Music' : subtitle,
+        imageUrl: artworkUrl,
+        songCount: _extractSongCountFromText(subtitle),
+      );
+
+      charts.add(chart);
+
+      if (charts.length >= take) break;
+    }
+
+    return charts.take(take).toList(growable: false);
+  }
+
+  static List<YtmAlbum> _parseYtmAlbumsFromShelves(
+    Map<String, dynamic> payload, {
+    required int take,
+    bool preferredOnly = true,
+  }) {
+    final shelfRenderers = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicCarouselShelfRenderer', shelfRenderers);
+
+    final preferred = <YtmAlbum>[];
+    final seen = <String>{};
+    final candidateShelves = <Map<String, dynamic>>[];
+
+    for (final shelf in shelfRenderers) {
+      final shelfTitle = _extractCarouselShelfTitle(shelf);
+      final normalizedTitle = _normalizeShelfTitleForMatching(shelfTitle);
+      final priority = _albumShelfPriority(shelfTitle);
+      final looksLikeAlbumShelf =
+          normalizedTitle.contains('album') ||
+          normalizedTitle.contains('release') ||
+          priority < 100;
+
+      if (preferredOnly) {
+        // "Albums for you" is the highest-priority shelf.
+        if (priority != 0) continue;
+      } else {
+        if (!looksLikeAlbumShelf) continue;
+      }
+      candidateShelves.add(shelf);
+    }
+
+    candidateShelves.sort((a, b) {
+      final aPriority = _albumShelfPriority(_extractCarouselShelfTitle(a));
+      final bPriority = _albumShelfPriority(_extractCarouselShelfTitle(b));
+      return aPriority.compareTo(bPriority);
+    });
+
+    for (final shelf in candidateShelves) {
+      final twoRows = <Map<String, dynamic>>[];
+      final responsiveRows = <Map<String, dynamic>>[];
+      _collectMapsByKey(shelf, 'musicTwoRowItemRenderer', twoRows);
+      _collectMapsByKey(
+        shelf,
+        'musicResponsiveListItemRenderer',
+        responsiveRows,
+      );
+
+      for (final renderer in twoRows) {
+        final mapped = _mapTwoRowRendererToAlbum(renderer);
+        if (mapped == null) continue;
+        if (!seen.add(mapped.browseId.toLowerCase())) continue;
+        preferred.add(mapped);
+        if (preferred.length >= take) break;
+      }
+      if (preferred.length >= take) break;
+
+      for (final renderer in responsiveRows) {
+        final mapped = _mapResponsiveRendererToAlbum(renderer);
+        if (mapped == null) continue;
+        if (!seen.add(mapped.browseId.toLowerCase())) continue;
+        preferred.add(mapped);
+        if (preferred.length >= take) break;
+      }
+      if (preferred.length >= take) break;
+    }
+
+    return preferred.take(take).toList(growable: false);
+  }
+
+  static String _normalizeShelfTitleForMatching(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r"[^a-z0-9]+"), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  static int _albumShelfPriority(String shelfTitle) {
+    final normalized = _normalizeShelfTitleForMatching(shelfTitle);
+    if (normalized.isEmpty) return 100;
+
+    if (normalized.contains('albums for you') ||
+        (normalized.contains('for you') && normalized.contains('album'))) {
+      return 0;
+    }
+    if (normalized.contains('easy mornings')) return 1;
+    if (normalized.contains('today s global hits') ||
+        normalized.contains('todays global hits')) {
+      return 2;
+    }
+    if (normalized.contains('india s biggest hits') ||
+        normalized.contains('indias biggest hits')) {
+      return 3;
+    }
+    if (normalized.contains('new releases') ||
+        normalized.contains('new release')) {
+      return 4;
+    }
+    if (normalized.contains('album')) return 20;
+    return 100;
+  }
+
+  static Future<List<YtmAlbum>> _searchAlbumsViaYtm({
+    required _YtmBootstrapCache bootstrap,
+    required String query,
+    required int take,
+  }) async {
+    final payload = await _postYtmSearch(
+      bootstrap: bootstrap,
+      query: query,
+      useSongsParams: false,
+      timeout: _ytmSearchTimeout,
+    );
+
+    final twoRows = <Map<String, dynamic>>[];
+    final responsiveRows = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicTwoRowItemRenderer', twoRows);
+    _collectMapsByKey(
+      payload,
+      'musicResponsiveListItemRenderer',
+      responsiveRows,
+    );
+
+    final out = <YtmAlbum>[];
+    final seen = <String>{};
+
+    for (final renderer in twoRows) {
+      final mapped = _mapTwoRowRendererToAlbum(renderer);
+      if (mapped == null) continue;
+      if (!seen.add(mapped.browseId.toLowerCase())) continue;
+      out.add(mapped);
+      if (out.length >= take) return out;
+    }
+
+    for (final renderer in responsiveRows) {
+      final mapped = _mapResponsiveRendererToAlbum(renderer);
+      if (mapped == null) continue;
+      if (!seen.add(mapped.browseId.toLowerCase())) continue;
+      out.add(mapped);
+      if (out.length >= take) break;
+    }
+
+    return out.take(take).toList(growable: false);
+  }
+
+  static YtmAlbum? _mapTwoRowRendererToAlbum(Map<String, dynamic> renderer) {
+    final title = _textFromRuns(_asMap(renderer['title'])).trim();
+    if (title.isEmpty) return null;
+
+    final endpoint =
+        _extractAlbumNavigationEndpoint(renderer) ??
+        _asMap(renderer['navigationEndpoint']);
+    final browse = _asMap(endpoint?['browseEndpoint']);
+    final browseId = (browse?['browseId'] ?? '').toString().trim();
+    if (browseId.isEmpty) return null;
+
+    final pageType =
+        _asMap(
+          _asMap(
+            browse?['browseEndpointContextSupportedConfigs'],
+          )?['browseEndpointContextMusicConfig'],
+        )?['pageType']?.toString().toUpperCase() ??
+        '';
+    final subtitle = _textFromRuns(_asMap(renderer['subtitle'])).trim();
+    final looksLikeAlbum =
+        pageType.contains('ALBUM') || subtitle.toLowerCase().contains('album');
+    if (!looksLikeAlbum) return null;
+
+    final artworkUrl =
+        _extractPreferredAlbumThumbnail(
+          _asList(
+            _asMap(
+              _asMap(
+                _asMap(
+                  renderer['thumbnailRenderer'],
+                )?['musicThumbnailRenderer'],
+              )?['thumbnail'],
+            )?['thumbnails'],
+          ),
+        ) ??
+        '';
+
+    return YtmAlbum(
+      browseId: browseId,
+      title: title,
+      subtitle: subtitle.isEmpty ? 'Album - YouTube Music' : subtitle,
+      imageUrl: artworkUrl,
+    );
+  }
+
+  static YtmAlbum? _mapResponsiveRendererToAlbum(
+    Map<String, dynamic> renderer,
+  ) {
+    final columns = _asList(renderer['flexColumns']);
+    if (columns.isEmpty) return null;
+
+    final firstColumn = _asMap(
+      _asMap(columns.first)?['musicResponsiveListItemFlexColumnRenderer'],
+    );
+    final firstText = _asMap(firstColumn?['text']);
+    final title = _textFromRuns(firstText).trim();
+    if (title.isEmpty) return null;
+
+    String browseId = '';
+    String pageType = '';
+    for (final run in _asList(firstText?['runs'])) {
+      final browse = _asMap(
+        _asMap(_asMap(run)?['navigationEndpoint'])?['browseEndpoint'],
+      );
+      final candidate = (browse?['browseId'] ?? '').toString().trim();
+      if (candidate.isEmpty) continue;
+      browseId = candidate;
+      pageType =
+          _asMap(
+            _asMap(
+              browse?['browseEndpointContextSupportedConfigs'],
+            )?['browseEndpointContextMusicConfig'],
+          )?['pageType']?.toString().toUpperCase() ??
+          '';
+      break;
+    }
+    if (browseId.isEmpty) return null;
+
+    final secondColumn = columns.length > 1
+        ? _asMap(
+            _asMap(columns[1])?['musicResponsiveListItemFlexColumnRenderer'],
+          )
+        : null;
+    final subtitle = _textFromRuns(_asMap(secondColumn?['text'])).trim();
+    final looksLikeAlbum =
+        pageType.contains('ALBUM') || subtitle.toLowerCase().contains('album');
+    if (!looksLikeAlbum) return null;
+
+    final artworkUrl =
+        _extractPreferredAlbumThumbnail(
+          _asList(
+            _asMap(
+              _asMap(
+                _asMap(renderer['thumbnail'])?['musicThumbnailRenderer'],
+              )?['thumbnail'],
+            )?['thumbnails'],
+          ),
+        ) ??
+        '';
+
+    return YtmAlbum(
+      browseId: browseId,
+      title: title,
+      subtitle: subtitle.isEmpty ? 'Album - YouTube Music' : subtitle,
+      imageUrl: artworkUrl,
+    );
+  }
+
+  static String _extractCarouselShelfTitle(Map<String, dynamic> shelf) {
+    final header = _asMap(shelf['header']);
+    final basic = _asMap(header?['musicCarouselShelfBasicHeaderRenderer']);
+    final title = _textFromRuns(_asMap(basic?['title'])).trim();
+    if (title.isNotEmpty) return title;
+    return _textFromRuns(_asMap(basic?['strapline'])).trim();
+  }
+
+  static List<YtmArtist> _parseYtmArtistsFromShelves(
+    Map<String, dynamic> payload, {
+    required int take,
+    bool preferredOnly = true,
+  }) {
+    final shelfRenderers = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicCarouselShelfRenderer', shelfRenderers);
+
+    final out = <YtmArtist>[];
+    final seen = <String>{};
+
+    for (final shelf in shelfRenderers) {
+      final shelfTitle = _extractCarouselShelfTitle(shelf).toLowerCase();
+      if (shelfTitle.contains('new release')) continue;
+
+      final isPreferred =
+          shelfTitle.contains('artists for you') ||
+          (shelfTitle.contains('for you') && shelfTitle.contains('artist'));
+      if (preferredOnly) {
+        if (!isPreferred) continue;
+      } else {
+        final looksLikeArtistShelf = shelfTitle.contains('artist');
+        if (!looksLikeArtistShelf) continue;
+      }
+
+      final twoRows = <Map<String, dynamic>>[];
+      final responsiveRows = <Map<String, dynamic>>[];
+      _collectMapsByKey(shelf, 'musicTwoRowItemRenderer', twoRows);
+      _collectMapsByKey(
+        shelf,
+        'musicResponsiveListItemRenderer',
+        responsiveRows,
+      );
+
+      for (final renderer in twoRows) {
+        final artist = _mapTwoRowRendererToArtist(renderer);
+        if (artist == null) continue;
+        if (!seen.add(artist.browseId.toLowerCase())) continue;
+        out.add(artist);
+        if (out.length >= take) break;
+      }
+      if (out.length >= take) break;
+
+      for (final renderer in responsiveRows) {
+        final artist = _mapResponsiveRendererToArtist(renderer);
+        if (artist == null) continue;
+        if (!seen.add(artist.browseId.toLowerCase())) continue;
+        out.add(artist);
+        if (out.length >= take) break;
+      }
+      if (out.length >= take) break;
+    }
+
+    return out.take(take).toList(growable: false);
+  }
+
+  static List<YtmArtist> _parseYtmArtistsFromSearchResults(
+    Map<String, dynamic> payload, {
+    required int take,
+  }) {
+    final twoRows = <Map<String, dynamic>>[];
+    final responsiveRows = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicTwoRowItemRenderer', twoRows);
+    _collectMapsByKey(
+      payload,
+      'musicResponsiveListItemRenderer',
+      responsiveRows,
+    );
+
+    final out = <YtmArtist>[];
+    final seen = <String>{};
+
+    for (final renderer in twoRows) {
+      final artist = _mapTwoRowRendererToArtist(renderer);
+      if (artist == null) continue;
+      if (!seen.add(artist.browseId.toLowerCase())) continue;
+      out.add(artist);
+      if (out.length >= take) return out;
+    }
+
+    for (final renderer in responsiveRows) {
+      final artist = _mapResponsiveRendererToArtist(renderer);
+      if (artist == null) continue;
+      if (!seen.add(artist.browseId.toLowerCase())) continue;
+      out.add(artist);
+      if (out.length >= take) break;
+    }
+
+    return out.take(take).toList(growable: false);
+  }
+
+  static YtmArtist? _mapTwoRowRendererToArtist(Map<String, dynamic> renderer) {
+    final name = _textFromRuns(_asMap(renderer['title'])).trim();
+    if (name.isEmpty) return null;
+
+    final endpoint =
+        _asMap(renderer['navigationEndpoint']) ??
+        _extractAlbumNavigationEndpoint(renderer);
+    final browse = _asMap(endpoint?['browseEndpoint']);
+    final browseId = (browse?['browseId'] ?? '').toString().trim();
+    if (browseId.isEmpty) return null;
+
+    final pageType = _extractBrowsePageType(browse);
+    final subtitle = _textFromRuns(_asMap(renderer['subtitle'])).trim();
+    final looksLikeArtist =
+        pageType.contains('ARTIST') ||
+        browseId.toUpperCase().startsWith('UC') ||
+        subtitle.toLowerCase().contains('artist');
+    if (!looksLikeArtist) return null;
+
+    final imageUrl =
+        _extractPreferredArtistThumbnail(
+          _asList(
+            _asMap(
+              _asMap(
+                _asMap(
+                  renderer['thumbnailRenderer'],
+                )?['musicThumbnailRenderer'],
+              )?['thumbnail'],
+            )?['thumbnails'],
+          ),
+        ) ??
+        '';
+
+    return YtmArtist(
+      browseId: browseId,
+      name: name,
+      subtitle: subtitle.isEmpty ? 'Artist' : subtitle,
+      imageUrl: imageUrl,
+    );
+  }
+
+  static YtmArtist? _mapResponsiveRendererToArtist(
+    Map<String, dynamic> renderer,
+  ) {
+    final columns = _asList(renderer['flexColumns']);
+    if (columns.isEmpty) return null;
+
+    final firstColumn = _asMap(
+      _asMap(columns.first)?['musicResponsiveListItemFlexColumnRenderer'],
+    );
+    final firstText = _asMap(firstColumn?['text']);
+    final name = _textFromRuns(firstText).trim();
+    if (name.isEmpty) return null;
+
+    String browseId = '';
+    String pageType = '';
+    for (final run in _asList(firstText?['runs'])) {
+      final browse = _asMap(
+        _asMap(_asMap(run)?['navigationEndpoint'])?['browseEndpoint'],
+      );
+      final candidate = (browse?['browseId'] ?? '').toString().trim();
+      if (candidate.isEmpty) continue;
+      browseId = candidate;
+      pageType = _extractBrowsePageType(browse);
+      break;
+    }
+    if (browseId.isEmpty) return null;
+
+    final secondColumn = columns.length > 1
+        ? _asMap(
+            _asMap(columns[1])?['musicResponsiveListItemFlexColumnRenderer'],
+          )
+        : null;
+    final subtitle = _textFromRuns(_asMap(secondColumn?['text'])).trim();
+    final looksLikeArtist =
+        pageType.contains('ARTIST') ||
+        browseId.toUpperCase().startsWith('UC') ||
+        subtitle.toLowerCase().contains('artist');
+    if (!looksLikeArtist) return null;
+
+    final imageUrl =
+        _extractPreferredArtistThumbnail(
+          _asList(
+            _asMap(
+              _asMap(
+                _asMap(renderer['thumbnail'])?['musicThumbnailRenderer'],
+              )?['thumbnail'],
+            )?['thumbnails'],
+          ),
+        ) ??
+        '';
+
+    return YtmArtist(
+      browseId: browseId,
+      name: name,
+      subtitle: subtitle.isEmpty ? 'Artist' : subtitle,
+      imageUrl: imageUrl,
+    );
+  }
+
+  static String? _extractPreferredArtistThumbnail(List<dynamic> thumbs) {
+    if (thumbs.isEmpty) return null;
+
+    String? bestSquareYtmUrl;
+    var bestSquareYtmArea = -1;
+    String? bestSquareUrl;
+    var bestSquareArea = -1;
+
+    for (final thumb in thumbs) {
+      final map = _asMap(thumb);
+      if (map == null) continue;
+
+      final url = (map['url'] ?? '').toString().trim();
+      if (url.isEmpty) continue;
+
+      final width = (map['width'] is num) ? (map['width'] as num).toInt() : 0;
+      final height = (map['height'] is num)
+          ? (map['height'] as num).toInt()
+          : 0;
+      if (width <= 0 || height <= 0) continue;
+
+      final area = width * height;
+      final ratio = width / height;
+      final isSquareish = ratio >= 0.8 && ratio <= 1.25;
+      if (!isSquareish) continue;
+
+      final isYtm = YoutubeThumbnailUtils.isYtmArtworkUrl(url);
+      if (isYtm && area > bestSquareYtmArea) {
+        bestSquareYtmArea = area;
+        bestSquareYtmUrl = url;
+      }
+      if (area > bestSquareArea) {
+        bestSquareArea = area;
+        bestSquareUrl = url;
+      }
+    }
+
+    return bestSquareYtmUrl ??
+        bestSquareUrl ??
+        _extractLargestThumbnail(thumbs);
+  }
+
+  static String _extractBrowsePageType(Map<String, dynamic>? browse) {
+    return _asMap(
+          _asMap(
+            browse?['browseEndpointContextSupportedConfigs'],
+          )?['browseEndpointContextMusicConfig'],
+        )?['pageType']?.toString().toUpperCase() ??
+        '';
+  }
+
+  static Map<String, dynamic>? _extractChartNavigationEndpoint(
+    Map<String, dynamic> renderer,
+  ) {
+    final direct = _asMap(renderer['navigationEndpoint']);
+    if (direct != null) return direct;
+
+    final titleRuns = _asList(_asMap(_asMap(renderer['title'])?['runs']));
+    for (final run in titleRuns) {
+      final endpoint = _asMap(_asMap(run)?['navigationEndpoint']);
+      if (endpoint != null) return endpoint;
+    }
+
+    final subtitleRuns = _asList(_asMap(_asMap(renderer['subtitle'])?['runs']));
+    for (final run in subtitleRuns) {
+      final endpoint = _asMap(_asMap(run)?['navigationEndpoint']);
+      if (endpoint != null) return endpoint;
+    }
+
+    return null;
+  }
+
+  static Map<String, dynamic>? _extractAlbumNavigationEndpoint(
+    Map<String, dynamic> renderer,
+  ) {
+    final direct = _asMap(renderer['navigationEndpoint']);
+    if (direct != null) return direct;
+
+    final titleRuns = _asList(_asMap(_asMap(renderer['title'])?['runs']));
+    for (final run in titleRuns) {
+      final endpoint = _asMap(_asMap(run)?['navigationEndpoint']);
+      if (endpoint != null) return endpoint;
+    }
+
+    final subtitleRuns = _asList(_asMap(_asMap(renderer['subtitle'])?['runs']));
+    for (final run in subtitleRuns) {
+      final endpoint = _asMap(_asMap(run)?['navigationEndpoint']);
+      if (endpoint != null) return endpoint;
+    }
+
+    return null;
+  }
+
+  static String _toYtmBrowseId(String idOrBrowseId) {
+    final raw = idOrBrowseId.trim();
+    if (raw.isEmpty) return raw;
+    if (raw.startsWith('VL') ||
+        raw.startsWith('MPLY') ||
+        raw.startsWith('MPRE') ||
+        raw.startsWith('FEmusic')) {
+      return raw;
+    }
+    return 'VL$raw';
+  }
+
+  static String _toPlaylistIdForFallback(String idOrBrowseId) {
+    final raw = idOrBrowseId.trim();
+    if (raw.isEmpty) return '';
+    if (raw.startsWith('VL') && raw.length > 2) {
+      return raw.substring(2);
+    }
+    if (raw.startsWith('MPLY') ||
+        raw.startsWith('MPRE') ||
+        raw.startsWith('FEmusic')) {
+      return '';
+    }
+    return raw;
+  }
+
+  static void _collectMapsByKey(
+    dynamic node,
+    String targetKey,
+    List<Map<String, dynamic>> out,
+  ) {
+    if (node is List) {
+      for (final item in node) {
+        _collectMapsByKey(item, targetKey, out);
+      }
+      return;
+    }
+
+    if (node is! Map) return;
+    final map = _asMap(node);
+    if (map == null) return;
+
+    for (final entry in map.entries) {
+      if (entry.key == targetKey) {
+        final matched = _asMap(entry.value);
+        if (matched != null) out.add(matched);
+      }
+      _collectMapsByKey(entry.value, targetKey, out);
+    }
+  }
+
+  static int? _extractSongCountFromText(String text) {
+    if (text.trim().isEmpty) return null;
+    final match = RegExp(
+      r'(\d{1,4})\s*(?:songs?|tracks?)',
+      caseSensitive: false,
+    ).firstMatch(text);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  static String? _extractLargestThumbnail(List<dynamic> thumbs) {
+    if (thumbs.isEmpty) return null;
+    String? bestUrl;
+    var bestArea = -1;
+
+    for (final thumb in thumbs) {
+      final map = _asMap(thumb);
+      if (map == null) continue;
+      final url = (map['url'] ?? '').toString().trim();
+      if (url.isEmpty) continue;
+
+      final width = (map['width'] is num) ? (map['width'] as num).toInt() : 0;
+      final height = (map['height'] is num)
+          ? (map['height'] as num).toInt()
+          : 0;
+      final area = width * height;
+      if (area >= bestArea) {
+        bestArea = area;
+        bestUrl = url;
+      }
+    }
+
+    return bestUrl;
+  }
+
+  static String? _extractPreferredAlbumThumbnail(List<dynamic> thumbs) {
+    if (thumbs.isEmpty) return null;
+
+    String? bestSquareYtmUrl;
+    var bestSquareYtmArea = -1;
+    String? bestSquareUrl;
+    var bestSquareArea = -1;
+    String? bestYtmUrl;
+    var bestYtmArea = -1;
+
+    for (final thumb in thumbs) {
+      final map = _asMap(thumb);
+      if (map == null) continue;
+
+      final url = (map['url'] ?? '').toString().trim();
+      if (url.isEmpty) continue;
+
+      final width = (map['width'] is num) ? (map['width'] as num).toInt() : 0;
+      final height = (map['height'] is num)
+          ? (map['height'] as num).toInt()
+          : 0;
+      final area = width * height;
+      final ratio = (width > 0 && height > 0) ? (width / height) : 1.0;
+      final isSquareish = ratio >= 0.85 && ratio <= 1.15;
+      final isYtm = YoutubeThumbnailUtils.isYtmArtworkUrl(url);
+
+      if (isYtm && isSquareish && area > bestSquareYtmArea) {
+        bestSquareYtmArea = area;
+        bestSquareYtmUrl = url;
+      }
+      if (isSquareish && area > bestSquareArea) {
+        bestSquareArea = area;
+        bestSquareUrl = url;
+      }
+      if (isYtm && area > bestYtmArea) {
+        bestYtmArea = area;
+        bestYtmUrl = url;
+      }
+    }
+
+    return bestSquareYtmUrl ??
+        bestSquareUrl ??
+        bestYtmUrl ??
+        _extractLargestThumbnail(thumbs);
+  }
+
   static String _textFromRuns(Map<String, dynamic>? textContainer) {
     if (textContainer == null) return '';
 
@@ -678,6 +1532,818 @@ class YoutubeApi {
     return normalizedSongs;
   }
 
+  static Future<List<YtmChart>> charts({
+    int take = 10,
+    bool forceRefresh = false,
+  }) async {
+    final safeTake = take.clamp(1, 20);
+    final cacheKey = 'ytm_charts::$safeTake';
+
+    if (!forceRefresh) {
+      final cached = _chartsCache[cacheKey];
+      if (cached != null && !cached.isExpired(const Duration(minutes: 45))) {
+        return cached.charts;
+      }
+    }
+
+    final bootstrap = await _getYtmBootstrap();
+    final payload = await _postYtmBrowse(
+      bootstrap: bootstrap,
+      browseId: 'FEmusic_charts',
+      timeout: _chartsTimeout,
+    );
+
+    final parsed = _parseYtmCharts(payload, take: safeTake);
+    final immutable = List<YtmChart>.unmodifiable(parsed);
+    _chartsCache[cacheKey] = _TimedChartsCache(immutable);
+    _trimChartsCache(maxEntries: 16);
+    return immutable;
+  }
+
+  static Future<List<YtmAlbum>> trendingAlbums({
+    int take = 10,
+    bool forceRefresh = false,
+  }) async {
+    final safeTake = take.clamp(1, 20);
+    final cacheKey = 'ytm_trending_albums::$safeTake';
+
+    if (!forceRefresh) {
+      final cached = _albumsCache[cacheKey];
+      if (cached != null && !cached.isExpired(_trendingAlbumsCacheTtl)) {
+        return cached.albums;
+      }
+    }
+
+    final collected = <YtmAlbum>[];
+    final seen = <String>{};
+    _YtmBootstrapCache? bootstrap;
+
+    try {
+      bootstrap = await _getYtmBootstrap();
+    } catch (_) {
+      bootstrap = null;
+    }
+
+    void appendAlbums(List<YtmAlbum> albums) {
+      for (final album in albums) {
+        final dedupKey = album.browseId.toLowerCase();
+        if (!seen.add(dedupKey)) continue;
+        collected.add(album);
+        if (collected.length >= safeTake) break;
+      }
+    }
+
+    if (bootstrap != null) {
+      try {
+        final homePayload = await _postYtmBrowse(
+          bootstrap: bootstrap,
+          browseId: 'FEmusic_home',
+          timeout: _chartsTimeout,
+        );
+
+        // 1) Main priority: "Albums for you".
+        appendAlbums(
+          _parseYtmAlbumsFromShelves(
+            homePayload,
+            take: safeTake * 3,
+            preferredOnly: true,
+          ),
+        );
+
+        // 2) Same payload, now include other ranked shelves too.
+        if (collected.length < safeTake) {
+          appendAlbums(
+            _parseYtmAlbumsFromShelves(
+              homePayload,
+              take: safeTake * 4,
+              preferredOnly: false,
+            ),
+          );
+        }
+      } catch (_) {
+        // Continue to next fallback.
+      }
+    }
+
+    if (collected.length < safeTake && bootstrap != null) {
+      try {
+        final explorePayload = await _postYtmBrowse(
+          bootstrap: bootstrap,
+          browseId: 'FEmusic_explore',
+          timeout: _chartsTimeout,
+        );
+        appendAlbums(
+          _parseYtmAlbumsFromShelves(
+            explorePayload,
+            take: safeTake * 4,
+            preferredOnly: false,
+          ),
+        );
+      } catch (_) {
+        // Continue to search fallbacks.
+      }
+    }
+
+    if (collected.length < safeTake && bootstrap != null) {
+      const fallbackQueries = <String>[
+        'Albums For You',
+        'Easy Mornings',
+        "Today's Global Hits",
+        "India's Biggest Hits",
+        'New Releases',
+        'popular music albums',
+        'top albums',
+      ];
+
+      for (final query in fallbackQueries) {
+        if (collected.length >= safeTake) break;
+        try {
+          final searched = await _searchAlbumsViaYtm(
+            bootstrap: bootstrap,
+            query: query,
+            take: safeTake * 2,
+          );
+          appendAlbums(searched);
+        } catch (_) {
+          // Try next query.
+        }
+      }
+    }
+
+    // Last-resort fallback: convert charts into album entries to avoid empty UI.
+    if (collected.isEmpty) {
+      try {
+        final chartFallback = await charts(
+          take: safeTake,
+          forceRefresh: forceRefresh,
+        );
+        appendAlbums(
+          chartFallback
+              .map(
+                (c) => YtmAlbum(
+                  browseId: c.browseId,
+                  title: c.title,
+                  subtitle: c.subtitle,
+                  imageUrl: c.imageUrl,
+                ),
+              )
+              .toList(growable: false),
+        );
+      } catch (_) {
+        // Keep empty only if all fallbacks fail.
+      }
+    }
+
+    final immutable = List<YtmAlbum>.unmodifiable(
+      collected.take(safeTake).toList(growable: false),
+    );
+    if (immutable.isNotEmpty) {
+      _albumsCache[cacheKey] = _TimedAlbumsCache(immutable);
+      _trimAlbumsCache(maxEntries: 16);
+    } else {
+      _albumsCache.remove(cacheKey);
+    }
+    return immutable;
+  }
+
+  static Future<List<YtmArtist>> trendingArtists({
+    int take = 12,
+    bool forceRefresh = false,
+  }) async {
+    final safeTake = take.clamp(1, 30);
+    final cacheKey = 'ytm_trending_artists::$safeTake';
+
+    if (!forceRefresh) {
+      final cached = _artistsCache[cacheKey];
+      if (cached != null && !cached.isExpired(const Duration(minutes: 45))) {
+        return cached.artists;
+      }
+    }
+
+    final collected = <YtmArtist>[];
+    final seen = <String>{};
+    _YtmBootstrapCache? bootstrap;
+
+    try {
+      bootstrap = await _getYtmBootstrap();
+    } catch (_) {
+      bootstrap = null;
+    }
+
+    Future<void> collectFromPayload(
+      Map<String, dynamic> payload, {
+      required bool preferredOnly,
+      required int takeMultiplier,
+    }) async {
+      final parsed = _parseYtmArtistsFromShelves(
+        payload,
+        take: safeTake * takeMultiplier,
+        preferredOnly: preferredOnly,
+      );
+      for (final artist in parsed) {
+        final dedupKey = artist.browseId.toLowerCase();
+        if (!seen.add(dedupKey)) continue;
+        collected.add(artist);
+        if (collected.length >= safeTake) break;
+      }
+    }
+
+    if (bootstrap != null) {
+      try {
+        final homePayload = await _postYtmBrowse(
+          bootstrap: bootstrap,
+          browseId: 'FEmusic_home',
+          timeout: _chartsTimeout,
+        );
+        await collectFromPayload(
+          homePayload,
+          preferredOnly: true,
+          takeMultiplier: 3,
+        );
+        if (collected.isEmpty) {
+          await collectFromPayload(
+            homePayload,
+            preferredOnly: false,
+            takeMultiplier: 3,
+          );
+        }
+      } catch (_) {
+        // Continue to fallbacks.
+      }
+    }
+
+    if (collected.isEmpty && bootstrap != null) {
+      try {
+        final explorePayload = await _postYtmBrowse(
+          bootstrap: bootstrap,
+          browseId: 'FEmusic_explore',
+          timeout: _chartsTimeout,
+        );
+        await collectFromPayload(
+          explorePayload,
+          preferredOnly: false,
+          takeMultiplier: 3,
+        );
+      } catch (_) {
+        // Continue to search fallback.
+      }
+    }
+
+    if (collected.isEmpty && bootstrap != null) {
+      try {
+        final searchPayload = await _postYtmSearch(
+          bootstrap: bootstrap,
+          query: 'popular artists',
+          useSongsParams: false,
+          timeout: _ytmSearchTimeout,
+        );
+        final parsed = _parseYtmArtistsFromSearchResults(
+          searchPayload,
+          take: safeTake * 2,
+        );
+        for (final artist in parsed) {
+          final dedupKey = artist.browseId.toLowerCase();
+          if (!seen.add(dedupKey)) continue;
+          collected.add(artist);
+          if (collected.length >= safeTake) break;
+        }
+      } catch (_) {
+        // Keep empty on failure.
+      }
+    }
+
+    if (collected.isEmpty) {
+      try {
+        final explodeArtists = await _trendingArtistsViaYoutubeExplode(
+          take: safeTake,
+        );
+        for (final artist in explodeArtists) {
+          final dedupKey = artist.browseId.toLowerCase();
+          if (!seen.add(dedupKey)) continue;
+          collected.add(artist);
+          if (collected.length >= safeTake) break;
+        }
+      } catch (_) {
+        // Keep empty if explode fallback fails.
+      }
+    }
+
+    final immutable = List<YtmArtist>.unmodifiable(
+      collected.take(safeTake).toList(growable: false),
+    );
+    if (immutable.isNotEmpty) {
+      _artistsCache[cacheKey] = _TimedArtistsCache(immutable);
+      _trimArtistsCache(maxEntries: 16);
+    } else {
+      _artistsCache.remove(cacheKey);
+    }
+    return immutable;
+  }
+
+  static Future<List<SaavnSong>> artistSongs(
+    String artistBrowseId, {
+    String? artistName,
+    int take = 120,
+    bool forceRefresh = false,
+  }) async {
+    final normalized = artistBrowseId.trim();
+    if (normalized.isEmpty) return const [];
+
+    final safeTake = take.clamp(10, 300);
+    final cacheKey = '${normalized.toLowerCase()}::$safeTake';
+    if (!forceRefresh) {
+      final cached = _artistSongsCache[cacheKey];
+      if (cached != null && !cached.isExpired(const Duration(minutes: 20))) {
+        return cached.songs;
+      }
+    }
+
+    List<SaavnSong> songs;
+    try {
+      songs = await _artistSongsViaYtm(
+        artistBrowseId: normalized,
+        take: safeTake,
+      );
+    } catch (_) {
+      songs = const [];
+    }
+    if (songs.isEmpty && artistName != null && artistName.trim().isNotEmpty) {
+      try {
+        final fallback = await _searchViaYtm(
+          query: artistName.trim(),
+          take: safeTake,
+        );
+        final filtered = fallback
+            .where((song) => _artistNameMatchesSong(song, artistName))
+            .toList(growable: false);
+        songs = filtered.isNotEmpty
+            ? filtered.take(safeTake).toList(growable: false)
+            : fallback.take(safeTake).toList(growable: false);
+      } catch (_) {
+        // Keep empty result if fallback search fails.
+      }
+    }
+    final immutable = List<SaavnSong>.unmodifiable(songs);
+    _artistSongsCache[cacheKey] = _TimedSongsCache(immutable);
+    _trimCache(_artistSongsCache, maxEntries: 100);
+    return immutable;
+  }
+
+  static Future<List<SaavnSong>> _artistSongsViaYtm({
+    required String artistBrowseId,
+    required int take,
+  }) async {
+    final bootstrap = await _getYtmBootstrap();
+    final payload = await _postYtmBrowse(
+      bootstrap: bootstrap,
+      browseId: artistBrowseId,
+      timeout: _chartSongsTimeout,
+    );
+
+    final renderers = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicResponsiveListItemRenderer', renderers);
+
+    final songs = <SaavnSong>[];
+    final seen = <String>{};
+    for (final renderer in renderers) {
+      final mapped = _mapYtmRendererToSong(renderer);
+      if (mapped == null) continue;
+      if (!seen.add(mapped.id)) continue;
+      songs.add(mapped);
+      if (songs.length >= take) break;
+    }
+    return songs.take(take).toList(growable: false);
+  }
+
+  static bool _artistNameMatchesSong(SaavnSong song, String artistName) {
+    final artistTokens = artistName
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .map((e) => e.trim())
+        .where((e) => e.length >= 3)
+        .toList(growable: false);
+    if (artistTokens.isEmpty) return true;
+
+    final songArtists = song.artists.toLowerCase();
+    for (final token in artistTokens) {
+      if (songArtists.contains(token)) return true;
+    }
+    return false;
+  }
+
+  static Future<List<YtmArtist>> _trendingArtistsViaYoutubeExplode({
+    required int take,
+  }) async {
+    final queries = <String>[
+      'popular music artists official channels',
+      'top singers official artist channels',
+      'music artists topic channels',
+    ];
+    final out = <YtmArtist>[];
+    final seen = <String>{};
+
+    for (final query in queries) {
+      try {
+        final firstPage = await _yt.search
+            .search(query, filter: TypeFilters.channel)
+            .timeout(_searchFallbackTimeout);
+        final channels = <SearchChannel>[
+          ...firstPage.whereType<SearchChannel>(),
+        ];
+        var currentPage = firstPage;
+        var pageGuard = 0;
+
+        while (channels.length < take * 3 && pageGuard < 1) {
+          final nextPage = await currentPage.nextPage().timeout(
+            _searchFallbackTimeout,
+          );
+          if (nextPage == null || nextPage.isEmpty) break;
+          channels.addAll(nextPage.whereType<SearchChannel>());
+          currentPage = nextPage;
+          pageGuard++;
+        }
+
+        for (final item in channels) {
+          final id = item.id.value.trim();
+          final name = item.name.trim();
+          if (id.isEmpty || name.isEmpty) continue;
+          if (!seen.add(id.toLowerCase())) continue;
+
+          final imageUrl = _bestExplodeChannelThumbnail(item.thumbnails);
+          out.add(
+            YtmArtist(
+              browseId: id,
+              name: name,
+              subtitle: 'Artist',
+              imageUrl: imageUrl,
+            ),
+          );
+          if (out.length >= take) {
+            return out.take(take).toList(growable: false);
+          }
+        }
+      } catch (_) {
+        // Continue with the next query.
+      }
+    }
+
+    return out.take(take).toList(growable: false);
+  }
+
+  static String _bestExplodeChannelThumbnail(List<Thumbnail> thumbs) {
+    if (thumbs.isEmpty) return '';
+
+    Thumbnail? bestSquare;
+    var bestSquareArea = -1;
+    Thumbnail? bestAny;
+    var bestAnyArea = -1;
+
+    for (final thumb in thumbs) {
+      final width = thumb.width;
+      final height = thumb.height;
+      if (width <= 0 || height <= 0) continue;
+
+      final area = width * height;
+      final ratio = width / height;
+      final isSquareish = ratio >= 0.8 && ratio <= 1.25;
+
+      if (isSquareish && area > bestSquareArea) {
+        bestSquare = thumb;
+        bestSquareArea = area;
+      }
+      if (area > bestAnyArea) {
+        bestAny = thumb;
+        bestAnyArea = area;
+      }
+    }
+
+    return (bestSquare ?? bestAny)?.url.toString() ?? '';
+  }
+
+  static Future<List<SaavnSong>> chartSongs(
+    String chartId, {
+    int take = 120,
+    bool forceRefresh = false,
+    bool resolveArtworkFallback = true,
+  }) async {
+    final normalized = chartId.trim();
+    if (normalized.isEmpty) return const [];
+
+    final safeTake = take.clamp(10, 300);
+    final cacheKey =
+        '${normalized.toLowerCase()}::$safeTake::${resolveArtworkFallback ? "art" : "raw"}';
+
+    if (!forceRefresh) {
+      final cached = _chartSongsCache[cacheKey];
+      if (cached != null && !cached.isExpired(const Duration(minutes: 20))) {
+        return cached.songs;
+      }
+    }
+
+    List<SaavnSong> ytmSongs = const [];
+    try {
+      ytmSongs = await _chartSongsViaYtm(chartId: normalized, take: safeTake);
+    } catch (_) {
+      ytmSongs = const [];
+    }
+
+    List<SaavnSong> fallbackSongs = const [];
+    if (ytmSongs.isEmpty) {
+      try {
+        final playlistFallbackId = _toPlaylistIdForFallback(normalized);
+        if (playlistFallbackId.isNotEmpty) {
+          fallbackSongs = await _chartSongsViaPlaylistVideos(
+            playlistId: playlistFallbackId,
+            take: safeTake,
+          );
+        }
+      } catch (_) {
+        if (ytmSongs.isEmpty) rethrow;
+      }
+    }
+
+    var songs = _mergeWithDedup(ytmSongs, fallbackSongs, safeTake);
+    songs = _applySessionArtworkOverrides(songs);
+    if (resolveArtworkFallback && songs.isNotEmpty) {
+      try {
+        songs = await _withSearchArtworkFallback(songs);
+      } catch (_) {
+        // Keep base songs if artwork fallback fails.
+      }
+    }
+
+    final immutable = List<SaavnSong>.unmodifiable(songs);
+    _chartSongsCache[cacheKey] = _TimedSongsCache(immutable);
+    _trimCache(_chartSongsCache, maxEntries: 100);
+    return immutable;
+  }
+
+  static Future<List<SaavnSong>> _chartSongsViaYtm({
+    required String chartId,
+    required int take,
+  }) async {
+    final browseId = _toYtmBrowseId(chartId);
+    final bootstrap = await _getYtmBootstrap();
+    final payload = await _postYtmBrowse(
+      bootstrap: bootstrap,
+      browseId: browseId,
+      timeout: _chartSongsTimeout,
+    );
+
+    final renderers = <Map<String, dynamic>>[];
+    _collectMapsByKey(payload, 'musicResponsiveListItemRenderer', renderers);
+
+    final songs = <SaavnSong>[];
+    final seen = <String>{};
+    for (final renderer in renderers) {
+      final mapped = _mapYtmRendererToSong(renderer);
+      if (mapped == null) continue;
+      if (!seen.add(mapped.id)) continue;
+      songs.add(mapped);
+      if (songs.length >= take) break;
+    }
+
+    return songs.take(take).toList(growable: false);
+  }
+
+  static Future<List<SaavnSong>> resolveSongArtworkFallback(
+    List<SaavnSong> songs,
+  ) async {
+    if (songs.isEmpty) return const [];
+    return _withSearchArtworkFallback(List<SaavnSong>.from(songs));
+  }
+
+  static Future<SaavnSong> resolveSingleSongArtworkFallback(
+    SaavnSong song,
+  ) async {
+    final cacheKey = _sessionArtworkKeyForSong(song);
+    final cachedUrl = _sessionSongArtworkOverrides[cacheKey];
+    if (cachedUrl != null && cachedUrl.trim().isNotEmpty) {
+      if (cachedUrl.trim() == song.imageUrl.trim()) return song;
+      return SaavnSong(
+        id: song.id,
+        name: song.name,
+        artists: song.artists,
+        imageUrl: cachedUrl,
+        duration: song.duration,
+        downloadUrls: song.downloadUrls,
+      );
+    }
+
+    if (!_needsSearchArtworkFallback(song.imageUrl)) return song;
+
+    final query = '${song.name} ${song.artists}'.trim();
+    if (query.isEmpty) return song;
+
+    final matches = await _searchViaYtm(query: query, take: 6);
+    final picked = _pickArtworkFallbackSong(seed: song, matches: matches);
+    if (picked == null) return song;
+    if (picked.imageUrl.trim().isEmpty) return song;
+    if (_needsSearchArtworkFallback(picked.imageUrl)) return song;
+
+    _rememberSessionArtworkOverride(cacheKey, picked.imageUrl.trim());
+    return SaavnSong(
+      id: song.id,
+      name: song.name,
+      artists: song.artists,
+      imageUrl: picked.imageUrl,
+      duration: song.duration,
+      downloadUrls: song.downloadUrls,
+    );
+  }
+
+  static Future<List<SaavnSong>> _withSearchArtworkFallback(
+    List<SaavnSong> songs,
+  ) async {
+    if (songs.isEmpty) return const [];
+
+    final upgraded = List<SaavnSong>.from(songs);
+    var lookups = 0;
+
+    for (var i = 0; i < upgraded.length; i++) {
+      final seed = upgraded[i];
+      if (!_needsSearchArtworkFallback(seed.imageUrl)) continue;
+      if (lookups >= _maxChartArtworkFallbackLookups) break;
+      lookups++;
+
+      try {
+        upgraded[i] = await resolveSingleSongArtworkFallback(seed);
+      } catch (_) {
+        // Keep original artwork when fallback lookup fails.
+      }
+    }
+
+    return upgraded;
+  }
+
+  static bool _needsSearchArtworkFallback(String imageUrl) {
+    return YoutubeThumbnailUtils.isLikelyLowQualityArtwork(imageUrl);
+  }
+
+  static List<SaavnSong> _applySessionArtworkOverrides(List<SaavnSong> songs) {
+    if (songs.isEmpty || _sessionSongArtworkOverrides.isEmpty) return songs;
+
+    final out = <SaavnSong>[];
+    for (final song in songs) {
+      final key = _sessionArtworkKeyForSong(song);
+      final cachedUrl = _sessionSongArtworkOverrides[key];
+      if (cachedUrl == null || cachedUrl.trim().isEmpty) {
+        out.add(song);
+        continue;
+      }
+      if (cachedUrl.trim() == song.imageUrl.trim()) {
+        out.add(song);
+        continue;
+      }
+      out.add(
+        SaavnSong(
+          id: song.id,
+          name: song.name,
+          artists: song.artists,
+          imageUrl: cachedUrl,
+          duration: song.duration,
+          downloadUrls: song.downloadUrls,
+        ),
+      );
+    }
+    return out;
+  }
+
+  static String _sessionArtworkKeyForSong(SaavnSong song) {
+    final id = song.id.trim().toLowerCase();
+    if (id.isNotEmpty) return id;
+    final title = song.name.trim().toLowerCase();
+    final artist = song.artists.trim().toLowerCase();
+    return '$title::$artist';
+  }
+
+  static void _rememberSessionArtworkOverride(String key, String imageUrl) {
+    if (key.trim().isEmpty || imageUrl.trim().isEmpty) return;
+    _sessionSongArtworkOverrides[key] = imageUrl;
+    if (_sessionSongArtworkOverrides.length <=
+        _maxSessionSongArtworkOverrides) {
+      return;
+    }
+
+    final overflow =
+        _sessionSongArtworkOverrides.length - _maxSessionSongArtworkOverrides;
+    if (overflow <= 0) return;
+
+    final keys = _sessionSongArtworkOverrides.keys.toList(growable: false);
+    for (var i = 0; i < overflow && i < keys.length; i++) {
+      _sessionSongArtworkOverrides.remove(keys[i]);
+    }
+  }
+
+  static SaavnSong? _pickArtworkFallbackSong({
+    required SaavnSong seed,
+    required List<SaavnSong> matches,
+  }) {
+    if (matches.isEmpty) return null;
+
+    final seedTitleTokens = _tokenizeForArtwork(seed.name);
+    final seedArtistTokens = _tokenizeForArtwork(seed.artists);
+
+    SaavnSong? best;
+    var bestScore = -1;
+
+    for (final candidate in matches) {
+      final art = candidate.imageUrl.trim();
+      if (art.isEmpty) continue;
+
+      var score = 0;
+      if (YoutubeThumbnailUtils.isYtmArtworkUrl(art)) score += 8;
+      if (!_needsSearchArtworkFallback(art)) score += 6;
+
+      final candidateTitleTokens = _tokenizeForArtwork(candidate.name);
+      final candidateArtistTokens = _tokenizeForArtwork(candidate.artists);
+      score += _tokenOverlap(seedTitleTokens, candidateTitleTokens) * 4;
+      score += _tokenOverlap(seedArtistTokens, candidateArtistTokens) * 3;
+
+      if (candidate.id == seed.id) score += 3;
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+
+    return best;
+  }
+
+  static List<String> _tokenizeForArtwork(String value) {
+    return value
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .map((token) => token.trim())
+        .where((token) => token.length >= 3)
+        .where(
+          (token) => !{
+            'feat',
+            'from',
+            'with',
+            'official',
+            'audio',
+            'video',
+            'song',
+            'music',
+            'the',
+            'and',
+          }.contains(token),
+        )
+        .toList(growable: false);
+  }
+
+  static int _tokenOverlap(List<String> a, List<String> b) {
+    if (a.isEmpty || b.isEmpty) return 0;
+    final setB = b.toSet();
+    var count = 0;
+    for (final token in a) {
+      if (setB.contains(token)) count++;
+    }
+    return count;
+  }
+
+  static Future<List<SaavnSong>> _chartSongsViaPlaylistVideos({
+    required String playlistId,
+    required int take,
+  }) async {
+    final videos = await _yt.playlists
+        .getVideos(playlistId)
+        .take(take * 2)
+        .toList()
+        .timeout(_chartSongsTimeout);
+
+    final strict = <SaavnSong>[];
+    final strictSeen = <String>{};
+    final relaxed = <SaavnSong>[];
+    final relaxedSeen = <String>{};
+
+    for (final video in videos) {
+      final strictMapped = _mapVideoToSong(video, query: '', strictMode: true);
+      if (strictMapped != null) {
+        if (strictSeen.add(strictMapped.id)) {
+          strict.add(strictMapped);
+        }
+        if (strict.length >= take) break;
+        continue;
+      }
+
+      final relaxedMapped = _mapVideoToSong(
+        video,
+        query: '',
+        strictMode: false,
+      );
+      if (relaxedMapped == null) continue;
+      if (strictSeen.contains(relaxedMapped.id)) continue;
+      if (relaxedSeen.add(relaxedMapped.id)) {
+        relaxed.add(relaxedMapped);
+      }
+    }
+
+    return _mergeWithDedup(strict, relaxed, take);
+  }
+
   static Future<List<SaavnSong>> _search({
     required String query,
     required String originalQuery,
@@ -735,26 +2401,42 @@ class YoutubeApi {
     var related = await _yt.videos.getRelatedVideos(video).timeout(timeout);
     if (related == null || related.isEmpty) return const [];
 
-    final out = <SaavnSong>[];
-    final seen = <String>{};
+    final strict = <SaavnSong>[];
+    final strictSeen = <String>{};
+    final relaxed = <SaavnSong>[];
+    final relaxedSeen = <String>{};
     RelatedVideosList? current = related;
     var pageGuard = 0;
 
-    while (current != null && out.length < take && pageGuard < 3) {
+    while (current != null && strict.length < take && pageGuard < 3) {
       final page = current;
       for (final item in page) {
-        final mapped = _mapVideoToSong(item, query: '', strictMode: false);
-        if (mapped == null) continue;
-        if (!seen.add(mapped.id)) continue;
-        out.add(mapped);
-        if (out.length >= take) break;
+        final strictMapped = _mapVideoToSong(item, query: '', strictMode: true);
+        if (strictMapped != null) {
+          if (strictSeen.add(strictMapped.id)) {
+            strict.add(strictMapped);
+          }
+          if (strict.length >= take) break;
+          continue;
+        }
+
+        final relaxedMapped = _mapVideoToSong(
+          item,
+          query: '',
+          strictMode: false,
+        );
+        if (relaxedMapped == null) continue;
+        if (strictSeen.contains(relaxedMapped.id)) continue;
+        if (relaxedSeen.add(relaxedMapped.id)) {
+          relaxed.add(relaxedMapped);
+        }
       }
-      if (out.length >= take) break;
+      if (strict.length >= take) break;
       current = await page.nextPage().timeout(timeout);
       pageGuard++;
     }
 
-    return out;
+    return _mergeWithDedup(strict, relaxed, take);
   }
 
   static Future<List<Video>> _collectSearchVideos({
@@ -1036,6 +2718,33 @@ class YoutubeApi {
       cache.remove(keys[i]);
     }
   }
+
+  static void _trimChartsCache({required int maxEntries}) {
+    if (_chartsCache.length <= maxEntries) return;
+    final keys = _chartsCache.keys.toList(growable: false);
+    final removeCount = _chartsCache.length - maxEntries;
+    for (var i = 0; i < removeCount; i++) {
+      _chartsCache.remove(keys[i]);
+    }
+  }
+
+  static void _trimAlbumsCache({required int maxEntries}) {
+    if (_albumsCache.length <= maxEntries) return;
+    final keys = _albumsCache.keys.toList(growable: false);
+    final removeCount = _albumsCache.length - maxEntries;
+    for (var i = 0; i < removeCount; i++) {
+      _albumsCache.remove(keys[i]);
+    }
+  }
+
+  static void _trimArtistsCache({required int maxEntries}) {
+    if (_artistsCache.length <= maxEntries) return;
+    final keys = _artistsCache.keys.toList(growable: false);
+    final removeCount = _artistsCache.length - maxEntries;
+    for (var i = 0; i < removeCount; i++) {
+      _artistsCache.remove(keys[i]);
+    }
+  }
 }
 
 class _TimedSongsCache {
@@ -1043,6 +2752,39 @@ class _TimedSongsCache {
   final List<SaavnSong> songs;
 
   _TimedSongsCache(this.songs) : timestamp = DateTime.now();
+
+  bool isExpired(Duration ttl) {
+    return DateTime.now().difference(timestamp) > ttl;
+  }
+}
+
+class _TimedChartsCache {
+  final DateTime timestamp;
+  final List<YtmChart> charts;
+
+  _TimedChartsCache(this.charts) : timestamp = DateTime.now();
+
+  bool isExpired(Duration ttl) {
+    return DateTime.now().difference(timestamp) > ttl;
+  }
+}
+
+class _TimedAlbumsCache {
+  final DateTime timestamp;
+  final List<YtmAlbum> albums;
+
+  _TimedAlbumsCache(this.albums) : timestamp = DateTime.now();
+
+  bool isExpired(Duration ttl) {
+    return DateTime.now().difference(timestamp) > ttl;
+  }
+}
+
+class _TimedArtistsCache {
+  final DateTime timestamp;
+  final List<YtmArtist> artists;
+
+  _TimedArtistsCache(this.artists) : timestamp = DateTime.now();
 
   bool isExpired(Duration ttl) {
     return DateTime.now().difference(timestamp) > ttl;
@@ -1088,4 +2830,50 @@ class _YtmBootstrapCache {
   bool isExpired(Duration ttl) {
     return DateTime.now().difference(timestamp) > ttl;
   }
+}
+
+class YtmChart {
+  final String playlistId;
+  final String browseId;
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+  final int? songCount;
+
+  const YtmChart({
+    required this.playlistId,
+    required this.browseId,
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+    this.songCount,
+  });
+}
+
+class YtmAlbum {
+  final String browseId;
+  final String title;
+  final String subtitle;
+  final String imageUrl;
+
+  const YtmAlbum({
+    required this.browseId,
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+  });
+}
+
+class YtmArtist {
+  final String browseId;
+  final String name;
+  final String subtitle;
+  final String imageUrl;
+
+  const YtmArtist({
+    required this.browseId,
+    required this.name,
+    required this.subtitle,
+    required this.imageUrl,
+  });
 }

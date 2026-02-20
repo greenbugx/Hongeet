@@ -1,0 +1,5 @@
+v1.3.3+13
+- Downloads: backend now waits for the full file before returning so "Download complete" and the saved file are in sync.
+- Downloads: larger transfer buffer and throttled progress updates for faster, smoother downloads.
+- Downloads: clearer toasts—"Downloading" on tap, "Download complete" only when the file is fully written; "Download failed" when the backend returns an error.
+- Update UI: Added Quick Access Section in Library

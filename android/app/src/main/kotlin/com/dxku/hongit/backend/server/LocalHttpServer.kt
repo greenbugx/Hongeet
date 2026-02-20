@@ -4,6 +4,8 @@ import com.dxku.hongit.backend.DownloadService
 import com.dxku.hongit.backend.saavn.SaavnService
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONObject
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class LocalHttpServer(
     port: Int = 8080,
@@ -159,13 +161,24 @@ class LocalHttpServer(
                         bestUrl
                     }
 
-                    DownloadService.start(context, title, downloadUrl)
+                    val requestId = UUID.randomUUID().toString()
+                    val pending = DownloadService.registerPending(requestId)
+                    DownloadService.start(context, title, downloadUrl, requestId)
+                    pending.latch.await(10, TimeUnit.MINUTES)
 
-                    newFixedLengthResponse(
-                        Response.Status.OK,
-                        "application/json",
-                        """{"status":"queued"}"""
-                    )
+                    if (pending.success.get() == true) {
+                        newFixedLengthResponse(
+                            Response.Status.OK,
+                            "application/json",
+                            """{"status":"completed"}"""
+                        )
+                    } else {
+                        newFixedLengthResponse(
+                            Response.Status.INTERNAL_ERROR,
+                            "application/json",
+                            """{"error":"download_failed"}"""
+                        )
+                    }
                 }
 
                 session.uri == "/download/direct" &&
@@ -193,13 +206,24 @@ class LocalHttpServer(
                         )
                     }
 
-                    DownloadService.start(context, title, url)
+                    val requestId = UUID.randomUUID().toString()
+                    val pending = DownloadService.registerPending(requestId)
+                    DownloadService.start(context, title, url, requestId)
+                    pending.latch.await(10, TimeUnit.MINUTES)
 
-                    newFixedLengthResponse(
-                        Response.Status.OK,
-                        "application/json",
-                        """{"status":"queued"}"""
-                    )
+                    if (pending.success.get() == true) {
+                        newFixedLengthResponse(
+                            Response.Status.OK,
+                            "application/json",
+                            """{"status":"completed"}"""
+                        )
+                    } else {
+                        newFixedLengthResponse(
+                            Response.Status.INTERNAL_ERROR,
+                            "application/json",
+                            """{"error":"download_failed"}"""
+                        )
+                    }
                 }
 
                 else -> {

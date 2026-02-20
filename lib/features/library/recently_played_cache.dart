@@ -22,7 +22,12 @@ class RecentlyPlayedCache {
   static Future<List<Map<String, dynamic>>> getAll() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getStringList(_key) ?? [];
-    return raw.map((e) => jsonDecode(e) as Map<String, dynamic>).toList();
+    var trimmed = raw;
+    if (raw.length > _maxItems) {
+      trimmed = raw.take(_maxItems).toList();
+      await prefs.setStringList(_key, trimmed);
+    }
+    return trimmed.map((e) => jsonDecode(e) as Map<String, dynamic>).toList();
   }
 
   static Future<void> clear() async {

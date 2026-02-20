@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:marquee/marquee.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/audio_player_service.dart';
@@ -44,6 +45,45 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
         );
       },
       child: child,
+    );
+  }
+
+  Widget _buildSongTitle(String text) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final style = Theme.of(context).textTheme.titleMedium;
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+
+        if (!painter.didExceedMaxLines) {
+          return Text(
+            text,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+          );
+        }
+
+        final height = (style?.fontSize ?? 16) * 1.35;
+        return SizedBox(
+          height: height,
+          child: Marquee(
+            text: text,
+            style: style,
+            blankSpace: 28,
+            velocity: 24,
+            pauseAfterRound: const Duration(milliseconds: 900),
+            startPadding: 6,
+            fadingEdgeStartFraction: 0.08,
+            fadingEdgeEndFraction: 0.08,
+            accelerationDuration: const Duration(milliseconds: 250),
+            decelerationDuration: const Duration(milliseconds: 250),
+          ),
+        );
+      },
     );
   }
 
@@ -230,6 +270,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                             fontSize: 26,
                             fontWeight: FontWeight.w600,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -296,8 +338,12 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 ),
                               ),
                             ),
-                            title: Text(song['title']),
-                            subtitle: Text(song['artist']),
+                            title: _buildSongTitle(song['title'].toString()),
+                            subtitle: Text(
+                              song['artist'].toString(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             trailing: IconButton(
                               icon: Icon(
                                 theme.useGlassTheme
