@@ -23,7 +23,7 @@
   <a href="https://sourceforge.net/projects/hongeet/files/latest/download">
       <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width="300" srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
   </a>
-  &nbsp;&nbsp;
+  &nbsp;
   <a href="https://apt.izzysoft.de/packages/com.dxku.hongit">
     <img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroidButtonGreyBorder_nofont.png" height="53" alt="Get it at IzzyOnDroid">
   </a>
