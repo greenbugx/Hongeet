@@ -1,0 +1,5 @@
+- Added sleep timer modes: 15m, 30m, 60m, and end of current song.
+- Added full-screen sleep trigger screen with tap-to-dismiss.
+- Added chart/albums/trending songs and trending songs section.
+- Added bounded parallel downloads (3 at a time) with queue feedback for large batches.
+- Improved search/home scrolling stability and section rendering.
