@@ -69,21 +69,12 @@ class _MiniPlayerContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final animateMiniVisuals = perfMode == UiPerformanceMode.full;
-    final currentIndex = player.currentIndex;
-    final queue = player.queue;
-    final currentSongId =
-        currentIndex != null && currentIndex >= 0 && currentIndex < queue.length
-        ? queue[currentIndex].id
-        : null;
-
     final imageScale = YoutubeThumbnailUtils.preferredArtworkScale(
-      songId: currentSongId,
       imageUrl: now.imageUrl,
-      youtubeVideoScale: 1.0,
+      youtubeVideoScale: 1.9,
       normalScale: 1.0,
     );
     final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
-      songId: currentSongId,
       imageUrl: now.imageUrl,
     );
 

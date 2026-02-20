@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:marquee/marquee.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:hongit/core/theme/app_theme.dart';
 import 'package:hongit/core/utils/audio_player_service.dart';
@@ -11,15 +10,12 @@ import 'package:hongit/data/api/saavn_api.dart';
 import 'package:hongit/data/api/youtube_api.dart';
 import 'package:hongit/data/models/saavn_song.dart';
 import 'package:hongit/features/search/widgets/song_card.dart';
-import 'package:hongit/features/search/chart_songs_screen.dart';
 import 'package:hongit/features/library/local_audio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/utils/glass_container.dart';
 import '../../core/utils/glass_page.dart';
-import '../../core/utils/youtube_thumbnail_utils.dart';
-import '../../core/widgets/fallback_network_image.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -28,10 +24,9 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen>
-    with AutomaticKeepAliveClientMixin<SearchScreen> {
+class _SearchScreenState extends State<SearchScreen> {
+  // ...existing code...
   final TextEditingController _controller = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
   Future<List<SaavnSong>>? _searchFuture;
   String _lastQuery = '';
   Timer? _debounce;
@@ -42,23 +37,6 @@ class _SearchScreenState extends State<SearchScreen>
   static const String _quickPicksCacheDataPrefix = 'quick_picks_cache_v2_';
   static const String _quickPicksCacheTsPrefix = 'quick_picks_cache_ts_v2_';
   static const int _quickPicksTargetCount = 24;
-  static const int _chartsTargetCount = 10;
-  static const int _albumsTargetCount = 10;
-  static const int _trendingSongsTargetCount = 12;
-  static const double _chartsSectionBodyHeight = 240;
-  static const double _albumsSectionBodyHeight = 240;
-  static const double _trendingSongRowHeight = 72;
-  static const double _trendingSongRowSpacing = 10;
-  static const double _trendingSongsSectionBodyHeight =
-      (_trendingSongsTargetCount * _trendingSongRowHeight) +
-      ((_trendingSongsTargetCount - 1) * _trendingSongRowSpacing);
-  static const List<String> _trendingSongsQueries = <String>[
-    'trending in shorts',
-    'latest singles',
-    'today\'s top songs',
-    'viral songs',
-    'top songs',
-  ];
   static const List<String> _globallyBlockedTitleTokens = <String>[
     'trending',
     'new song',
@@ -106,10 +84,6 @@ class _SearchScreenState extends State<SearchScreen>
 
   late List<LocalAudioTrack> _localAudios = [];
   late Future<List<LocalAudioTrack>> _localAudiosFuture = Future.value([]);
-  Future<_HomeSectionsData>? _homeSectionsFuture;
-  bool _servicesReady = false;
-  bool _useYoutubeService = false;
-  bool _useSaavnService = false;
 
   bool get isSearching => _controller.text.trim().isNotEmpty;
 
@@ -123,26 +97,16 @@ class _SearchScreenState extends State<SearchScreen>
     final prefs = await SharedPreferences.getInstance();
     final useYoutube = prefs.getBool('use_youtube_service') ?? false;
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
-    if (!mounted) return;
     if (!useYoutube && !useSaavn) {
-      setState(() {
-        _servicesReady = true;
-        _useYoutubeService = false;
-        _useSaavnService = false;
-        _homeSectionsFuture = null;
-        _localAudiosFuture = _loadLocalAudiosWithPermission();
-      });
+      _localAudiosFuture = _loadLocalAudiosWithPermission();
       _localAudiosFuture.then((tracks) {
-        if (!mounted) return;
-        setState(() => _localAudios = tracks);
+        if (mounted) {
+          setState(() => _localAudios = tracks);
+        }
       });
     } else {
       setState(() {
-        _servicesReady = true;
-        _useYoutubeService = useYoutube;
-        _useSaavnService = useSaavn;
         _searchFuture = _performSearch(_quickPicksQuery);
-        _homeSectionsFuture = useYoutube ? _loadHomeSections() : null;
       });
     }
   }
@@ -178,13 +142,10 @@ class _SearchScreenState extends State<SearchScreen>
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
     final query = _controller.text.trim();
     setState(() {
-      _servicesReady = true;
-      _useYoutubeService = useYoutube;
-      _useSaavnService = useSaavn;
       if (query.isEmpty) {
         _lastQuery = '';
         if (!useYoutube && !useSaavn) {
-          _homeSectionsFuture = null;
+          // Reload local audios when in local-only mode
           _searchFuture = null;
           _localAudiosFuture = _loadLocalAudiosWithPermission();
           _localAudiosFuture.then((tracks) {
@@ -193,9 +154,6 @@ class _SearchScreenState extends State<SearchScreen>
           });
         } else {
           _searchFuture = _performSearch(_quickPicksQuery, forceRefresh: true);
-          _homeSectionsFuture = useYoutube
-              ? _loadHomeSections(forceRefresh: true)
-              : null;
         }
       } else if (query.length < minSearchLength) {
         _searchFuture = null;
@@ -243,7 +201,7 @@ class _SearchScreenState extends State<SearchScreen>
     final prefs = await SharedPreferences.getInstance();
     final useYoutube = prefs.getBool('use_youtube_service') ?? false;
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
-
+    // If neither streaming service is enabled, do not perform network searches
     if (!useYoutube && !useSaavn) return const [];
     final isQuickPicksQuery = normalizedQuery.toLowerCase() == _quickPicksQuery;
     final cacheKey =
@@ -295,6 +253,7 @@ class _SearchScreenState extends State<SearchScreen>
         AppLogger.info('Using Saavn service for search: "$normalizedQuery"');
         songs = await SaavnApi.searchSongs(normalizedQuery);
       } else {
+        // No streaming service enabled; return empty result.
         return const [];
       }
 
@@ -352,10 +311,7 @@ class _SearchScreenState extends State<SearchScreen>
     final baseSongs = preFiltered ? songs : _applyGlobalResultFilter(songs);
     if (baseSongs.isEmpty) return const [];
 
-    final dedupedSongs = _dedupeSongsForQuickPicks(baseSongs);
-    if (dedupedSongs.isEmpty) return const [];
-
-    final scored = dedupedSongs
+    final scored = baseSongs
         .map((song) => _ScoredSong(song: song, score: _quickPickScore(song)))
         .toList(growable: false);
 
@@ -382,69 +338,6 @@ class _SearchScreenState extends State<SearchScreen>
         .take(_quickPicksTargetCount)
         .map((e) => e.song)
         .toList(growable: false);
-  }
-
-  List<SaavnSong> _dedupeSongsForQuickPicks(List<SaavnSong> songs) {
-    if (songs.isEmpty) return const [];
-
-    final out = <SaavnSong>[];
-    final seenIds = <String>{};
-    final seenContent = <String>{};
-
-    for (final song in songs) {
-      final id = song.id.trim().toLowerCase();
-      if (id.isNotEmpty && !seenIds.add(id)) continue;
-
-      final key = _quickPickContentKey(song);
-      if (key.isNotEmpty && !seenContent.add(key)) continue;
-
-      out.add(song);
-    }
-    return out;
-  }
-
-  String _quickPickContentKey(SaavnSong song) {
-    final title = _normalizeQuickPickTitle(song.name);
-    if (title.isEmpty) return '';
-    final artist = _normalizeQuickPickArtist(song.artists);
-    return '$title::$artist';
-  }
-
-  String _normalizeQuickPickTitle(String raw) {
-    var title = raw.toLowerCase().trim();
-    if (title.isEmpty) return '';
-
-    title = title.replaceAll(RegExp(r'[\(\[\{].*?[\)\]\}]'), ' ');
-    title = title.replaceAll(
-      RegExp(
-        r'\b(official|audio|video|lyrics?|lyric|full\s*song|visualizer|4k|8k|hd)\b',
-      ),
-      ' ',
-    );
-    title = title.replaceAll(RegExp(r'\b(feat|ft)\.?\b.*$'), ' ');
-    title = title.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
-    title = title.replaceAll(RegExp(r'\s+'), ' ').trim();
-    return title;
-  }
-
-  String _normalizeQuickPickArtist(String raw) {
-    var text = raw.toLowerCase().trim();
-    if (text.isEmpty || text == 'unknown') return '';
-
-    text = text.replaceAll('&', ',');
-    text = text.replaceAll(RegExp(r'\b(and|with|x)\b'), ',');
-    text = text.replaceAll(RegExp(r'\b(feat|ft)\.?\b'), ',');
-
-    final parts = text
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .map((e) => e.replaceAll(RegExp(r'[^a-z0-9 ]+'), ' ').trim())
-        .where((e) => e.isNotEmpty)
-        .toList(growable: false);
-
-    if (parts.isEmpty) return '';
-    return parts.first.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   int _quickPickScore(SaavnSong song) {
@@ -557,6 +450,7 @@ class _SearchScreenState extends State<SearchScreen>
 
   bool _containsEmoji(String value) {
     for (final rune in value.runes) {
+      // broad emoji ranges & dingbats or symbol blocks commonly used in spam titles
       final isEmoji =
           (rune >= 0x1F300 && rune <= 0x1FAFF) ||
           (rune >= 0x2600 && rune <= 0x27BF) ||
@@ -684,139 +578,20 @@ class _SearchScreenState extends State<SearchScreen>
     }
   }
 
-  Future<List<SaavnSong>> _loadTrendingSongs({
-    bool forceRefresh = false,
-  }) async {
-    final collected = <SaavnSong>[];
-    final seenIds = <String>{};
-    final seenKeys = <String>{};
-
-    String contentKey(SaavnSong song) {
-      final title = song.name.trim().toLowerCase();
-      final artist = song.artists.trim().toLowerCase();
-      return '$title::$artist';
-    }
-
-    bool looksLikeSingleSong(SaavnSong song) {
-      final text = '${song.name} ${song.artists}'.toLowerCase();
-      const blocked = <String>[
-        'full album',
-        'podcast',
-        'episode',
-        'interview',
-        'reaction',
-        'playlist',
-      ];
-      if (blocked.any(text.contains)) return false;
-      final duration = song.duration ?? 0;
-      if (duration > 0 && duration > 15 * 60) return false;
-      return true;
-    }
-
-    for (final query in _trendingSongsQueries) {
-      List<SaavnSong> batch = const <SaavnSong>[];
-      try {
-        batch = await _performSearch(query, forceRefresh: forceRefresh);
-      } catch (_) {
-        continue;
-      }
-
-      for (final song in batch) {
-        if (!looksLikeSingleSong(song)) continue;
-        final id = song.id.trim().toLowerCase();
-        if (id.isNotEmpty && !seenIds.add(id)) continue;
-        final key = contentKey(song);
-        if (key.isNotEmpty && !seenKeys.add(key)) continue;
-        collected.add(song);
-        if (collected.length >= _trendingSongsTargetCount) {
-          return collected;
-        }
-      }
-    }
-
-    if (collected.length < _trendingSongsTargetCount) {
-      final fallbackQueries = <String>[
-        _quickPicksQuery,
-        'latest songs',
-        'popular songs',
-      ];
-      for (final query in fallbackQueries) {
-        List<SaavnSong> batch = const <SaavnSong>[];
-        try {
-          batch = await _performSearch(query, forceRefresh: forceRefresh);
-        } catch (_) {
-          continue;
-        }
-        for (final song in batch) {
-          if (!looksLikeSingleSong(song)) continue;
-          final id = song.id.trim().toLowerCase();
-          if (id.isNotEmpty && !seenIds.add(id)) continue;
-          final key = contentKey(song);
-          if (key.isNotEmpty && !seenKeys.add(key)) continue;
-          collected.add(song);
-          if (collected.length >= _trendingSongsTargetCount) {
-            return collected;
-          }
-        }
-      }
-    }
-
-    if (collected.isNotEmpty) {
-      return collected.take(_trendingSongsTargetCount).toList(growable: false);
-    }
-
-    try {
-      final fallback = await _performSearch(
-        _quickPicksQuery,
-        forceRefresh: forceRefresh,
-      );
-      return fallback.take(_trendingSongsTargetCount).toList(growable: false);
-    } catch (_) {
-      return const <SaavnSong>[];
-    }
-  }
-
-  Future<_HomeSectionsData> _loadHomeSections({
-    bool forceRefresh = false,
-  }) async {
-    final chartsTask = YoutubeApi.charts(
-      take: _chartsTargetCount,
-      forceRefresh: forceRefresh,
-    ).catchError((_) => const <YtmChart>[]);
-    final albumsTask = YoutubeApi.trendingAlbums(
-      take: _albumsTargetCount,
-      forceRefresh: forceRefresh,
-    ).catchError((_) => const <YtmAlbum>[]);
-    final songsTask = _loadTrendingSongs(
-      forceRefresh: forceRefresh,
-    ).catchError((_) => const <SaavnSong>[]);
-
-    final charts = await chartsTask;
-    final albums = await albumsTask;
-    final trendingSongs = await songsTask;
-
-    return _HomeSectionsData(
-      charts: charts,
-      albums: albums,
-      trendingSongs: trendingSongs,
-    );
-  }
-
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     final trimmed = query.trim();
 
     if (trimmed.isEmpty) {
+      // Decide behavior based on enabled services: show quick-picks when
+      // streaming is enabled, otherwise clear search (local list shown).
       SharedPreferences.getInstance().then((prefs) {
         final useYoutube = prefs.getBool('use_youtube_service') ?? false;
         final useSaavn = prefs.getBool('use_saavn_service') ?? false;
         setState(() {
-          _servicesReady = true;
-          _useYoutubeService = useYoutube;
-          _useSaavnService = useSaavn;
           _lastQuery = '';
           if (!useYoutube && !useSaavn) {
-            _homeSectionsFuture = null;
+            // Clear search results and (re)load local audios.
             _searchFuture = null;
             _localAudiosFuture = _loadLocalAudiosWithPermission();
             _localAudiosFuture.then((tracks) {
@@ -825,7 +600,6 @@ class _SearchScreenState extends State<SearchScreen>
             });
           } else {
             _searchFuture = _performSearch(_quickPicksQuery);
-            _homeSectionsFuture = useYoutube ? _loadHomeSections() : null;
           }
         });
       });
@@ -842,14 +616,11 @@ class _SearchScreenState extends State<SearchScreen>
 
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (trimmed == _lastQuery) return;
-
+      // Choose local search when both streaming services are off.
       SharedPreferences.getInstance().then((prefs) {
         final useYoutube = prefs.getBool('use_youtube_service') ?? false;
         final useSaavn = prefs.getBool('use_saavn_service') ?? false;
         setState(() {
-          _servicesReady = true;
-          _useYoutubeService = useYoutube;
-          _useSaavnService = useSaavn;
           _lastQuery = trimmed;
           if (!useYoutube && !useSaavn) {
             _searchFuture = _searchLocalAudios(trimmed);
@@ -863,773 +634,130 @@ class _SearchScreenState extends State<SearchScreen>
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _controller.dispose();
     _debounce?.cancel();
     super.dispose();
   }
 
   @override
-  bool get wantKeepAlive => true;
-
-  @override
   Widget build(BuildContext context) {
-    super.build(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final animateSectionHeader = perfMode == UiPerformanceMode.full;
 
-    if (!_servicesReady) {
-      return const GlassPage(child: Center(child: CircularProgressIndicator()));
-    }
+    return FutureBuilder<Map<String, bool>>(
+      future: SharedPreferences.getInstance().then(
+        (prefs) => {
+          'use_youtube_service': prefs.getBool('use_youtube_service') ?? false,
+          'use_saavn_service': prefs.getBool('use_saavn_service') ?? false,
+        },
+      ),
+      builder: (context, snapshot) {
+        final useYoutube = snapshot.data?['use_youtube_service'] ?? false;
+        final useSaavn = snapshot.data?['use_saavn_service'] ?? false;
+        final isLocalMode = !useYoutube && !useSaavn;
 
-    final useYoutube = _useYoutubeService;
-    final useSaavn = _useSaavnService;
-    final isLocalMode = !useYoutube && !useSaavn;
+        return GlassPage(
+          child: RefreshIndicator(
+            onRefresh: _refreshSearch,
+            child: FutureBuilder<List<LocalAudioTrack>>(
+              future: isLocalMode ? _localAudiosFuture : null,
+              builder: (context, localSnapshot) {
+                if (isLocalMode &&
+                    localSnapshot.connectionState == ConnectionState.done &&
+                    localSnapshot.hasData) {
+                  _localAudios = localSnapshot.data ?? [];
+                }
 
-    return GlassPage(
-      child: RefreshIndicator(
-        onRefresh: _refreshSearch,
-        child: ListView(
-          key: const ValueKey<String>('search_screen_list'),
-          controller: _scrollController,
-          physics: const AlwaysScrollableScrollPhysics(),
-          cacheExtent: 720,
-          children: [
-            const Text(
-              'Welcome to\nHongeet',
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 20),
-
-            GlassContainer(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _controller,
-                  onChanged: _onSearchChanged,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    icon: Icon(
-                      themeProvider.useGlassTheme
-                          ? CupertinoIcons.search
-                          : Icons.search,
-                      color: Colors.white70,
+                return ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  cacheExtent: 720,
+                  children: [
+                    const Text(
+                      'Welcome to\nHongeet',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    hintText: isLocalMode
-                        ? 'Search local audio...'
-                        : 'Search songs, artists...',
-                    hintStyle: const TextStyle(color: Colors.white54),
-                    border: InputBorder.none,
-                    suffixIcon: _controller.text.isNotEmpty
-                        ? IconButton(
+                    const SizedBox(height: 20),
+
+                    GlassContainer(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          controller: _controller,
+                          onChanged: _onSearchChanged,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
                             icon: Icon(
                               themeProvider.useGlassTheme
-                                  ? CupertinoIcons.clear_circled_solid
-                                  : Icons.close,
+                                  ? CupertinoIcons.search
+                                  : Icons.search,
                               color: Colors.white70,
                             ),
-                            onPressed: () {
-                              _controller.clear();
-                              _onSearchChanged('');
-                            },
-                          )
-                        : null,
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 28),
-
-            if (!isLocalMode || isSearching) ...[
-              animateSectionHeader
-                  ? AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      child: Text(
-                        isSearching ? 'Search Results' : 'Quick Picks',
-                        key: ValueKey(isSearching),
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w500,
+                            hintText: isLocalMode
+                                ? 'Search local audio...'
+                                : 'Search songs, artists...',
+                            hintStyle: const TextStyle(color: Colors.white54),
+                            border: InputBorder.none,
+                            suffixIcon: _controller.text.isNotEmpty
+                                ? IconButton(
+                                    icon: Icon(
+                                      themeProvider.useGlassTheme
+                                          ? CupertinoIcons.clear_circled_solid
+                                          : Icons.close,
+                                      color: Colors.white70,
+                                    ),
+                                    onPressed: () {
+                                      _controller.clear();
+                                      _onSearchChanged('');
+                                    },
+                                  )
+                                : null,
+                          ),
                         ),
                       ),
-                    )
-                  : Text(
-                      isSearching ? 'Search Results' : 'Quick Picks',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
                     ),
-              const SizedBox(height: 16),
-            ],
 
-            isLocalMode
-                ? _buildLocalSearchResults(context)
-                : _buildSearchResults(context),
+                    const SizedBox(height: 28),
 
-            if (!isLocalMode && !isSearching && useYoutube) ...[
-              const SizedBox(height: 30),
-              _buildHomeSections(context),
-            ],
+                    if (!isLocalMode || isSearching) ...[
+                      animateSectionHeader
+                          ? AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              child: Text(
+                                isSearching ? 'Search Results' : 'Quick Picks',
+                                key: ValueKey(isSearching),
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            )
+                          : Text(
+                              isSearching ? 'Search Results' : 'Quick Picks',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                      const SizedBox(height: 16),
+                    ],
 
-            const SizedBox(height: 80),
-          ],
-        ),
-      ),
-    );
-  }
+                    // Results
+                    isLocalMode
+                        ? _buildLocalSearchResults(context)
+                        : _buildSearchResults(context),
 
-  Widget _buildHomeSections(BuildContext context) {
-    _homeSectionsFuture ??= _loadHomeSections();
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
-    final fullMode = perfMode == UiPerformanceMode.full;
-
-    return FutureBuilder<_HomeSectionsData>(
-      future: _homeSectionsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Column(
-            crossAxisAlignment: fullMode
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.start,
-            children: [
-              _buildSectionLoadingPlaceholder(
-                context,
-                title: 'Charts',
-                height: _chartsSectionBodyHeight,
-                topPadding: 0,
-              ),
-              _buildSectionLoadingPlaceholder(
-                context,
-                title: 'Trending Albums',
-                height: _albumsSectionBodyHeight,
-                topPadding: 24,
-              ),
-              _buildSectionLoadingPlaceholder(
-                context,
-                title: 'Trending Songs',
-                height: _trendingSongsSectionBodyHeight,
-                topPadding: 24,
-              ),
-            ],
-          );
-        }
-
-        if (snapshot.hasError) {
-          return GlassContainer(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: [
-                  Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.exclamationmark_triangle
-                        : Icons.error_outline,
-                    color: Colors.white70,
-                  ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Failed to load home sections',
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                  ),
-                  OutlinedButton(
-                    onPressed: () {
-                      setState(() {
-                        _homeSectionsFuture = _loadHomeSections(
-                          forceRefresh: true,
-                        );
-                      });
-                    },
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 80),
+                  ],
+                );
+              },
             ),
-          );
-        }
-
-        final data = snapshot.data ?? const _HomeSectionsData.empty();
-        return Column(
-          children: [
-            _buildChartsSection(context, data.charts),
-            _buildTrendingAlbumsSection(context, data.albums),
-            _buildTrendingSongsSection(context, data.trendingSongs),
-          ],
+          ),
         );
       },
-    );
-  }
-
-  Widget _buildSectionLoadingPlaceholder(
-    BuildContext context, {
-    required String title,
-    required double height,
-    required double topPadding,
-  }) {
-    final perfMode = Provider.of<ThemeProvider>(
-      context,
-      listen: false,
-    ).resolvedUiPerformanceMode(context);
-    final fullMode = perfMode == UiPerformanceMode.full;
-    return Padding(
-      padding: EdgeInsets.only(top: topPadding),
-      child: Column(
-        crossAxisAlignment: fullMode
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: Text(
-              title,
-              textAlign: fullMode ? TextAlign.center : TextAlign.start,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: height,
-            child: const Center(child: CircularProgressIndicator()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChartsSection(BuildContext context, List<YtmChart> charts) {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
-    final smoothMode = perfMode == UiPerformanceMode.smooth;
-    final fullMode = perfMode == UiPerformanceMode.full;
-
-    return Column(
-      crossAxisAlignment: fullMode
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: fullMode
-              ? AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: const Text(
-                    'Charts',
-                    key: ValueKey('charts_full'),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                  ),
-                )
-              : const Text(
-                  'Charts',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: _chartsSectionBodyHeight,
-          child: charts.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No charts available right now',
-                    style: TextStyle(color: Colors.white60),
-                  ),
-                )
-              : ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.only(left: 2, right: 2, bottom: 8),
-                  cacheExtent: 900,
-                  addAutomaticKeepAlives: !smoothMode,
-                  addRepaintBoundaries: true,
-                  physics: smoothMode
-                      ? const ClampingScrollPhysics()
-                      : const BouncingScrollPhysics(
-                          parent: AlwaysScrollableScrollPhysics(),
-                        ),
-                  itemCount: charts.length,
-                  separatorBuilder: (_, index) => const SizedBox(width: 14),
-                  itemBuilder: (_, index) {
-                    final chart = charts[index];
-                    final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
-                      imageUrl: chart.imageUrl,
-                    );
-
-                    return SizedBox(
-                      width: 170,
-                      child: RepaintBoundary(
-                        child: GlassContainer(
-                          borderRadius: BorderRadius.circular(18),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      ChartSongsScreen(chart: chart),
-                                ),
-                              );
-                            },
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                AspectRatio(
-                                  aspectRatio: 1,
-                                  child: ClipRRect(
-                                    clipBehavior: Clip.antiAlias,
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(18),
-                                    ),
-                                    child: FallbackNetworkImage(
-                                      urls: imageCandidates,
-                                      width: double.infinity,
-                                      height: double.infinity,
-                                      cacheWidth: 640,
-                                      cacheHeight: 640,
-                                      fit: BoxFit.cover,
-                                      filterQuality: FilterQuality.medium,
-                                      fallback: Container(
-                                        color: Colors.black26,
-                                        child: Icon(
-                                          themeProvider.useGlassTheme
-                                              ? CupertinoIcons.waveform
-                                              : Icons.equalizer_rounded,
-                                          size: 34,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Flexible(
-                                  child: Padding(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      10,
-                                      8,
-                                      10,
-                                      8,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        SizedBox(
-                                          height: 20,
-                                          child: _AutoMarqueeText(
-                                            text: chart.title,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          chart.subtitle,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.white70,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTrendingAlbumsSection(
-    BuildContext context,
-    List<YtmAlbum> albums,
-  ) {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
-    final smoothMode = perfMode == UiPerformanceMode.smooth;
-    final fullMode = perfMode == UiPerformanceMode.full;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        crossAxisAlignment: fullMode
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: fullMode
-                ? AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: const Text(
-                      'Trending Albums',
-                      key: ValueKey('albums_full'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  )
-                : const Text(
-                    'Trending Albums',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: _albumsSectionBodyHeight,
-            child: albums.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No trending albums right now',
-                      style: TextStyle(color: Colors.white60),
-                    ),
-                  )
-                : ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.only(
-                      left: 2,
-                      right: 2,
-                      bottom: 8,
-                    ),
-                    cacheExtent: 900,
-                    addAutomaticKeepAlives: !smoothMode,
-                    addRepaintBoundaries: true,
-                    physics: smoothMode
-                        ? const ClampingScrollPhysics()
-                        : const BouncingScrollPhysics(
-                            parent: AlwaysScrollableScrollPhysics(),
-                          ),
-                    itemCount: albums.length,
-                    separatorBuilder: (_, index) => const SizedBox(width: 14),
-                    itemBuilder: (_, index) {
-                      final album = albums[index];
-                      final allImageCandidates =
-                          YoutubeThumbnailUtils.candidateUrls(
-                            imageUrl: album.imageUrl,
-                          );
-                      final ytmOnlyCandidates = allImageCandidates
-                          .where(YoutubeThumbnailUtils.isYtmArtworkUrl)
-                          .toList(growable: false);
-                      final imageCandidates = ytmOnlyCandidates.isNotEmpty
-                          ? ytmOnlyCandidates
-                          : allImageCandidates;
-                      final baseImageScale =
-                          YoutubeThumbnailUtils.preferredArtworkScale(
-                            imageUrl: album.imageUrl,
-                            youtubeVideoScale: 2.0,
-                            normalScale: 1.0,
-                          );
-                      final imageScale = ytmOnlyCandidates.isNotEmpty
-                          ? (baseImageScale < 1.04 ? 1.04 : baseImageScale)
-                          : (baseImageScale < 1.12 ? 1.12 : baseImageScale);
-                      final albumAsChart = YtmChart(
-                        playlistId: album.browseId,
-                        browseId: album.browseId,
-                        title: album.title,
-                        subtitle: album.subtitle,
-                        imageUrl: album.imageUrl,
-                      );
-
-                      return SizedBox(
-                        width: 170,
-                        child: RepaintBoundary(
-                          child: GlassContainer(
-                            borderRadius: BorderRadius.circular(18),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(18),
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => ChartSongsScreen(
-                                      chart: albumAsChart,
-                                      headerTitle: 'Albums',
-                                    ),
-                                  ),
-                                );
-                              },
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  AspectRatio(
-                                    aspectRatio: 1,
-                                    child: ClipRRect(
-                                      clipBehavior: Clip.antiAlias,
-                                      borderRadius: const BorderRadius.vertical(
-                                        top: Radius.circular(18),
-                                      ),
-                                      child: Transform.scale(
-                                        scale: imageScale,
-                                        child: FallbackNetworkImage(
-                                          urls: imageCandidates,
-                                          width: double.infinity,
-                                          height: double.infinity,
-                                          cacheWidth: 768,
-                                          cacheHeight: 768,
-                                          fit: BoxFit.cover,
-                                          alignment: Alignment.center,
-                                          filterQuality: FilterQuality.medium,
-                                          fallback: Container(
-                                            color: Colors.black26,
-                                            child: Icon(
-                                              themeProvider.useGlassTheme
-                                                  ? CupertinoIcons.music_albums
-                                                  : Icons.album_rounded,
-                                              size: 34,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  Flexible(
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        10,
-                                        8,
-                                        10,
-                                        8,
-                                      ),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          SizedBox(
-                                            height: 20,
-                                            child: _AutoMarqueeText(
-                                              text: album.title,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            album.subtitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: Colors.white70,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTrendingSongsSection(
-    BuildContext context,
-    List<SaavnSong> songs,
-  ) {
-    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
-    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
-    final fullMode = perfMode == UiPerformanceMode.full;
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        crossAxisAlignment: fullMode
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: fullMode
-                ? AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: const Text(
-                      'Trending Songs',
-                      key: ValueKey('trending_songs_full'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  )
-                : const Text(
-                    'Trending Songs',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                  ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: _trendingSongsSectionBodyHeight,
-            child: songs.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No trending songs right now',
-                      style: TextStyle(color: Colors.white60),
-                    ),
-                  )
-                : Builder(
-                    builder: (context) {
-                      final queuedSongs = songs
-                          .map(
-                            (s) => QueuedSong(
-                              id: s.id,
-                              meta: NowPlaying(
-                                title: s.name,
-                                artist: s.artists,
-                                imageUrl: s.imageUrl,
-                              ),
-                            ),
-                          )
-                          .toList(growable: false);
-
-                      return ListView.separated(
-                        physics: const NeverScrollableScrollPhysics(),
-                        padding: const EdgeInsets.only(bottom: 8),
-                        cacheExtent: 900,
-                        itemCount: songs.length,
-                        separatorBuilder: (_, index) =>
-                            const SizedBox(height: _trendingSongRowSpacing),
-                        itemBuilder: (_, index) {
-                          final song = songs[index];
-                          final imageCandidates =
-                              YoutubeThumbnailUtils.candidateUrls(
-                                songId: song.id,
-                                imageUrl: song.imageUrl,
-                              );
-                          final imageScale =
-                              YoutubeThumbnailUtils.preferredArtworkScale(
-                                songId: song.id,
-                                imageUrl: song.imageUrl,
-                                youtubeVideoScale: 1.0,
-                                normalScale: 1.0,
-                              );
-
-                          return RepaintBoundary(
-                            child: SizedBox(
-                              height: _trendingSongRowHeight,
-                              child: GlassContainer(
-                                borderRadius: BorderRadius.circular(14),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(14),
-                                  onTap: () async {
-                                    if (index < 0 ||
-                                        index >= queuedSongs.length) {
-                                      return;
-                                    }
-                                    await AudioPlayerService().playFromList(
-                                      songs: queuedSongs,
-                                      startIndex: index,
-                                    );
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        ClipRRect(
-                                          clipBehavior: Clip.antiAlias,
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
-                                          child: Transform.scale(
-                                            scale: imageScale,
-                                            child: FallbackNetworkImage(
-                                              urls: imageCandidates,
-                                              width: 56,
-                                              height: 56,
-                                              cacheWidth: 320,
-                                              cacheHeight: 320,
-                                              fit: BoxFit.cover,
-                                              alignment: Alignment.center,
-                                              filterQuality:
-                                                  FilterQuality.medium,
-                                              fallback: Container(
-                                                width: 56,
-                                                height: 56,
-                                                color: Colors.black26,
-                                                child: Icon(
-                                                  themeProvider.useGlassTheme
-                                                      ? CupertinoIcons
-                                                            .music_note_2
-                                                      : Icons
-                                                            .music_note_rounded,
-                                                  size: 24,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                song.name,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                song.artists,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  color: Colors.white70,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1648,6 +776,8 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
 
+    // If no query, use the already-loaded local audio list (avoids triggering
+    // a network search and ensures the home/Search screen shows local files).
     if (query.isEmpty) {
       final results = _localAudios
           .map(
@@ -1684,48 +814,50 @@ class _SearchScreenState extends State<SearchScreen>
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: GlassContainer(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () async {
-                    await AudioPlayerService().playLocalFiles(
-                      files: results
-                          .map((s) => (path: s.id, name: s.name))
-                          .toList(),
-                      startIndex: index,
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                song.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              song.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Local Audio',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white54,
-                                ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Local Audio',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white54,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(CupertinoIcons.play_fill),
+                        onPressed: () async {
+                          await AudioPlayerService().playLocalFiles(
+                            files: results
+                                .map((s) => (path: s.id, name: s.name))
+                                .toList(),
+                            startIndex: index,
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1735,6 +867,7 @@ class _SearchScreenState extends State<SearchScreen>
       );
     }
 
+    // Otherwise perform the existing search-backed flow.
     return FutureBuilder<List<SaavnSong>>(
       future: _searchFuture,
       builder: (context, snapshot) {
@@ -1774,48 +907,50 @@ class _SearchScreenState extends State<SearchScreen>
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: GlassContainer(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () async {
-                      await AudioPlayerService().playLocalFiles(
-                        files: results
-                            .map((s) => (path: s.id, name: s.name))
-                            .toList(),
-                        startIndex: index,
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  song.name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                song.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Local Audio',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white54,
-                                  ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Local Audio',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white54,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: const Icon(CupertinoIcons.play_fill),
+                          onPressed: () async {
+                            await AudioPlayerService().playLocalFiles(
+                              files: results
+                                  .map((s) => (path: s.id, name: s.name))
+                                  .toList(),
+                              startIndex: index,
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1968,68 +1103,9 @@ class _SessionSearchCacheEntry {
   const _SessionSearchCacheEntry({required this.songs});
 }
 
-class _HomeSectionsData {
-  final List<YtmChart> charts;
-  final List<YtmAlbum> albums;
-  final List<SaavnSong> trendingSongs;
-
-  const _HomeSectionsData({
-    required this.charts,
-    required this.albums,
-    required this.trendingSongs,
-  });
-
-  const _HomeSectionsData.empty()
-    : charts = const <YtmChart>[],
-      albums = const <YtmAlbum>[],
-      trendingSongs = const <SaavnSong>[];
-}
-
 class _ScoredSong {
   final SaavnSong song;
   final int score;
 
   const _ScoredSong({required this.song, required this.score});
-}
-
-class _AutoMarqueeText extends StatelessWidget {
-  final String text;
-  final TextStyle style;
-
-  const _AutoMarqueeText({required this.text, required this.style});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (_, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: text, style: style),
-          maxLines: 1,
-          textDirection: TextDirection.ltr,
-        )..layout(maxWidth: constraints.maxWidth);
-
-        if (!painter.didExceedMaxLines) {
-          return Text(
-            text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: style,
-          );
-        }
-
-        return Marquee(
-          text: text,
-          style: style,
-          blankSpace: 28,
-          velocity: 22,
-          pauseAfterRound: const Duration(milliseconds: 900),
-          startPadding: 2,
-          fadingEdgeStartFraction: 0.08,
-          fadingEdgeEndFraction: 0.08,
-          accelerationDuration: const Duration(milliseconds: 250),
-          decelerationDuration: const Duration(milliseconds: 250),
-        );
-      },
-    );
-  }
 }
