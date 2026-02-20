@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
+import 'dart:collection';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:marquee/marquee.dart';
@@ -24,6 +25,12 @@ import '../../features/library/local_audio_provider.dart';
 
 class FullPlayerSheet extends StatelessWidget {
   const FullPlayerSheet({super.key});
+  static const int _maxConcurrentDownloads = 3;
+  static const int _queueFeedbackThreshold = 5;
+  static int _activeDownloadCount = 0;
+  static final Queue<_QueuedDownloadTask> _downloadQueue =
+      Queue<_QueuedDownloadTask>();
+  static final Set<String> _queuedOrActiveSongIds = <String>{};
 
   String _fmt(Duration d) {
     final m = d.inMinutes.remainder(60).toString();
@@ -42,30 +49,76 @@ class FullPlayerSheet extends StatelessWidget {
       return;
     }
 
-    AppMessenger.show(
-      'Downloading: ${song.meta.title}',
-      color: Colors.blueGrey.shade800,
-    );
-
-    try {
-      if (song.id.startsWith('yt:')) {
-        final videoId = song.id.substring(3);
-        final audioUrl = await YoutubeSongApi.fetchBestStreamUrl(videoId);
-        await LocalBackendApi.downloadDirect(
-          title: song.meta.title,
-          url: audioUrl,
-        );
-      } else {
-        await LocalBackendApi.downloadSaavn(
-          title: song.meta.title,
-          songId: song.id,
-        );
-      }
-
-      AppMessenger.show('Download complete', color: Colors.green.shade700);
-    } catch (_) {
-      AppMessenger.show('Download failed', color: Colors.red.shade700);
+    if (_queuedOrActiveSongIds.contains(song.id)) {
+      AppMessenger.show(
+        'Already queued: ${song.meta.title}',
+        color: Colors.orange.shade700,
+      );
+      return;
     }
+
+    _queuedOrActiveSongIds.add(song.id);
+    _downloadQueue.add(_QueuedDownloadTask(song: song));
+    final pendingTotal = _activeDownloadCount + _downloadQueue.length;
+
+    if (pendingTotal > _queueFeedbackThreshold) {
+      AppMessenger.show(
+        'Queued $pendingTotal downloads. Running $_maxConcurrentDownloads at a time.',
+        color: Colors.blueGrey.shade800,
+      );
+    } else {
+      AppMessenger.show(
+        'Added to queue: ${song.meta.title}',
+        color: Colors.blueGrey.shade800,
+      );
+    }
+
+    _pumpDownloadQueue();
+  }
+
+  void _pumpDownloadQueue() {
+    while (_activeDownloadCount < _maxConcurrentDownloads &&
+        _downloadQueue.isNotEmpty) {
+      final task = _downloadQueue.removeFirst();
+      _activeDownloadCount++;
+      _runDownloadTask(task);
+    }
+  }
+
+  void _runDownloadTask(_QueuedDownloadTask task) {
+    () async {
+      final song = task.song;
+      AppMessenger.show(
+        'Downloading: ${song.meta.title}',
+        color: Colors.blueGrey.shade800,
+      );
+
+      try {
+        if (song.id.startsWith('yt:')) {
+          final videoId = song.id.substring(3);
+          final audioUrl = await YoutubeSongApi.fetchBestStreamUrl(videoId);
+          await LocalBackendApi.downloadDirect(
+            title: song.meta.title,
+            url: audioUrl,
+          );
+        } else {
+          await LocalBackendApi.downloadSaavn(
+            title: song.meta.title,
+            songId: song.id,
+          );
+        }
+
+        AppMessenger.show('Download complete', color: Colors.green.shade700);
+      } catch (_) {
+        AppMessenger.show('Download failed', color: Colors.red.shade700);
+      } finally {
+        _queuedOrActiveSongIds.remove(song.id);
+        if (_activeDownloadCount > 0) {
+          _activeDownloadCount--;
+        }
+        _pumpDownloadQueue();
+      }
+    }();
   }
 
   bool _isDownloadedLocalTrack(QueuedSong? song) {
@@ -1036,6 +1089,12 @@ class FullPlayerSheet extends StatelessWidget {
       },
     );
   }
+}
+
+class _QueuedDownloadTask {
+  final QueuedSong song;
+
+  const _QueuedDownloadTask({required this.song});
 }
 
 void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {

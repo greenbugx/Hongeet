@@ -29,7 +29,6 @@ class ChartSongsScreen extends StatefulWidget {
 }
 
 class _ChartSongsScreenState extends State<ChartSongsScreen> {
-  static const int _maxArtworkUpgradesPerLoad = 10;
   late Future<List<SaavnSong>> _songsFuture;
   List<SaavnSong>? _enhancedSongs;
   bool _isEnhancingArtwork = false;
@@ -123,7 +122,6 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
         continue;
       }
       targetIndexes.add(i);
-      if (targetIndexes.length >= _maxArtworkUpgradesPerLoad) break;
     }
     if (targetIndexes.isEmpty) return;
 
@@ -363,80 +361,78 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                           onPressed: () => Navigator.of(context).pop(),
                         ),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            widget.headerTitle,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        Text(
+                          widget.headerTitle,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 12),
-                    GlassContainer(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: FallbackNetworkImage(
-                                urls: artCandidates,
-                                width: 82,
-                                height: 82,
-                                cacheWidth: 512,
-                                cacheHeight: 512,
-                                fit: BoxFit.cover,
-                                filterQuality: FilterQuality.medium,
-                                fallback: Container(
-                                  width: 82,
-                                  height: 82,
-                                  color: Colors.black26,
-                                  child: Icon(
-                                    _chartFallbackIcon(theme.useGlassTheme),
-                                  ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: FallbackNetworkImage(
+                              urls: artCandidates,
+                              width: 210,
+                              height: 210,
+                              cacheWidth: 1024,
+                              cacheHeight: 1024,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.medium,
+                              fallback: Container(
+                                width: 210,
+                                height: 210,
+                                color: Colors.black26,
+                                child: Icon(
+                                  _chartFallbackIcon(theme.useGlassTheme),
+                                  size: 48,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.chart.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    widget.chart.subtitle,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '$resolvedSongCount songs',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white60,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            widget.chart.title,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            widget.chart.subtitle,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '$resolvedSongCount songs',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.white60,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -446,8 +442,8 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                         child: Center(
                           child: Text(
                             _enhanceTargetCount > 0
-                                ? 'Fetching album art... $_enhancedCount/$_enhanceTargetCount'
-                                : 'Fetching album art...',
+                                ? 'Fetching songs arts... $_enhancedCount/$_enhanceTargetCount'
+                                : 'Fetching songs arts...',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Colors.white60,
