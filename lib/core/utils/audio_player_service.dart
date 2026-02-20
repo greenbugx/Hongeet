@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'app_messenger.dart';
 import 'app_logger.dart';
 import 'data_saver_settings.dart';
 import 'streaming_preferences.dart';
+import '../widgets/sleep_timer_overlay_screen.dart';
 import '../../data/api/saavn_song_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../data/api/youtube_api.dart';
@@ -89,6 +91,16 @@ class AudioPlayerService {
   final Map<String, Future<_ResolvedStream>> _resolveInFlight = {};
   final Map<String, int> _youtubeRetryCount = {};
   final Map<String, int> _transientRetryCount = {};
+  Timer? _sleepTimer;
+  Timer? _sleepTicker;
+  DateTime? _sleepTimerEndsAt;
+  bool _sleepEndOfCurrentSong = false;
+  bool _sleepOverlayShowing = false;
+  final _sleepTimerSubject = BehaviorSubject<SleepTimerStatus>.seeded(
+    const SleepTimerStatus.off(),
+  );
+  Stream<SleepTimerStatus> get sleepTimerStream => _sleepTimerSubject.stream;
+  SleepTimerStatus get sleepTimerStatus => _sleepTimerSubject.value;
 
   static const Map<String, String> _defaultStreamHeaders = {
     'User-Agent':
@@ -223,6 +235,107 @@ class AudioPlayerService {
     }
     _lastAutoSkipNoticeAt = now;
     AppMessenger.show('Skipping song: server/load error');
+  }
+
+  void setSleepTimer(Duration duration) {
+    if (duration <= Duration.zero) {
+      clearSleepTimer(showMessage: false);
+      return;
+    }
+    _sleepTimer?.cancel();
+    _sleepTicker?.cancel();
+    _sleepEndOfCurrentSong = false;
+    _sleepTimerEndsAt = DateTime.now().add(duration);
+    _sleepTimer = Timer(duration, _onSleepTimerElapsed);
+    _sleepTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      _emitSleepTimerState();
+    });
+    _emitSleepTimerState();
+    final mins = duration.inMinutes;
+    AppMessenger.show('Sleep timer set: ${mins}m');
+  }
+
+  void setSleepTimerEndOfCurrentSong() {
+    _sleepTimer?.cancel();
+    _sleepTicker?.cancel();
+    _sleepTimerEndsAt = null;
+    _sleepEndOfCurrentSong = true;
+    _emitSleepTimerState();
+    AppMessenger.show('Sleep timer: end of current song');
+  }
+
+  void clearSleepTimer({bool showMessage = true}) {
+    final hadActive = _sleepTimer != null || _sleepEndOfCurrentSong;
+    _sleepTimer?.cancel();
+    _sleepTicker?.cancel();
+    _sleepTimer = null;
+    _sleepTicker = null;
+    _sleepTimerEndsAt = null;
+    _sleepEndOfCurrentSong = false;
+    _emitSleepTimerState();
+    if (showMessage && hadActive) {
+      AppMessenger.show('Sleep timer turned off');
+    }
+  }
+
+  void _emitSleepTimerState() {
+    if (_sleepEndOfCurrentSong) {
+      _sleepTimerSubject.add(const SleepTimerStatus.endOfCurrentSong());
+      return;
+    }
+    final endsAt = _sleepTimerEndsAt;
+    if (endsAt == null) {
+      _sleepTimerSubject.add(const SleepTimerStatus.off());
+      return;
+    }
+    final remaining = endsAt.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      _sleepTimerSubject.add(const SleepTimerStatus.off());
+      return;
+    }
+    _sleepTimerSubject.add(SleepTimerStatus.until(endsAt: endsAt));
+  }
+
+  void _onSleepTimerElapsed() {
+    _sleepTimer?.cancel();
+    _sleepTicker?.cancel();
+    _sleepTimer = null;
+    _sleepTicker = null;
+    _sleepTimerEndsAt = null;
+    _sleepEndOfCurrentSong = false;
+    _emitSleepTimerState();
+    unawaited(_stopFromSleepTimer(endOfCurrentSong: false));
+  }
+
+  Future<void> _stopFromSleepTimer({required bool endOfCurrentSong}) async {
+    await stopAndClearNowPlaying();
+    _showSleepTimerOverlay(endOfCurrentSong: endOfCurrentSong);
+  }
+
+  void _showSleepTimerOverlay({required bool endOfCurrentSong}) {
+    if (_sleepOverlayShowing) return;
+    final navigator = AppMessenger.navigatorKey.currentState;
+    final context = AppMessenger.navigatorKey.currentContext;
+    if (navigator == null || context == null) return;
+
+    _sleepOverlayShowing = true;
+    navigator
+        .push(
+          PageRouteBuilder<void>(
+            opaque: true,
+            barrierDismissible: false,
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                SleepTimerOverlayScreen(endOfCurrentSong: endOfCurrentSong),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+            transitionDuration: const Duration(milliseconds: 180),
+          ),
+        )
+        .whenComplete(() {
+          _sleepOverlayShowing = false;
+        });
   }
 
   void _removeCachedUrlsForSong(String songId) {
@@ -546,7 +659,6 @@ class AudioPlayerService {
     await playNow(song);
   }
 
-  /// Play a list of local files, starting at the specified index
   Future<void> playLocalFiles({
     required List<({String path, String name})> files,
     required int startIndex,
@@ -646,7 +758,6 @@ class AudioPlayerService {
     final current = _queue[_currentIndex];
     if (!current.id.startsWith('yt:')) return;
 
-    // Only fetch suggestions when streaming (YTM) is enabled
     await StreamingPreferences.load();
     if (!StreamingPreferences.useYoutube) return;
 
@@ -724,6 +835,11 @@ class AudioPlayerService {
 
   void _onPlayerStateChanged(PlayerState state) {
     if (state.processingState == ProcessingState.completed) {
+      if (_sleepEndOfCurrentSong) {
+        clearSleepTimer(showMessage: false);
+        unawaited(_stopFromSleepTimer(endOfCurrentSong: true));
+        return;
+      }
       if (_player.loopMode == LoopMode.one) {
         _player.seek(Duration.zero);
         _player.play();
@@ -758,8 +874,6 @@ class AudioPlayerService {
     _recentlyPlayedSubject.add([]);
   }
 
-  /// Remove a song from the queue by its ID
-  /// Returns true if the song was found and removed, false otherwise
   Future<bool> removeSongFromQueue(String songId) async {
     final indexToRemove = _queue.indexWhere((song) => song.id == songId);
     if (indexToRemove == -1) return false;
@@ -773,23 +887,19 @@ class AudioPlayerService {
       return true;
     }
 
-    // Update the queue
     _queue = List.unmodifiable(newQueue);
     _prefetchedForIndex = null;
     _notifyQueueChanged();
 
-    // Update current index if needed
     int newIndex = _currentIndex;
     if (wasCurrentSong) {
       if (newIndex >= newQueue.length) {
         newIndex = newQueue.length - 1;
       }
-      // Stop current playback
       ++_playToken;
       await _player.stop();
       _trackLoading.add(false);
 
-      // Play the new current song
       if (newIndex >= 0 && newIndex < newQueue.length) {
         _currentIndex = newIndex;
         _currentIndexSubject.add(newIndex);
@@ -806,7 +916,6 @@ class AudioPlayerService {
         _currentIndex = newIndex;
         _currentIndexSubject.add(newIndex);
       }
-      // Always notify so UI rebuilds 'Up Next'
       _notifyQueueChanged();
     }
 
@@ -814,6 +923,7 @@ class AudioPlayerService {
   }
 
   Future<void> stopAndClearNowPlaying() async {
+    clearSleepTimer(showMessage: false);
     ++_playToken;
     _queue = [];
     _notifyQueueChanged();
@@ -867,6 +977,8 @@ class AudioPlayerService {
   }
 
   Future<void> dispose() async {
+    _sleepTimer?.cancel();
+    _sleepTicker?.cancel();
     await _positionSub?.cancel();
     await _player.dispose();
     await _nowPlaying.close();
@@ -874,6 +986,7 @@ class AudioPlayerService {
     await _currentIndexSubject.close();
     await _queueVersion.close();
     await _trackLoading.close();
+    await _sleepTimerSubject.close();
   }
 }
 
@@ -890,4 +1003,17 @@ class _ResolvedStream {
   final Map<String, String> headers;
 
   const _ResolvedStream({required this.url, this.headers = const {}});
+}
+
+class SleepTimerStatus {
+  final DateTime? endsAt;
+  final bool endOfCurrentSong;
+
+  const SleepTimerStatus._({this.endsAt, required this.endOfCurrentSong});
+  const SleepTimerStatus.off() : this._(endOfCurrentSong: false);
+  const SleepTimerStatus.endOfCurrentSong() : this._(endOfCurrentSong: true);
+  const SleepTimerStatus.until({required DateTime endsAt})
+    : this._(endsAt: endsAt, endOfCurrentSong: false);
+
+  bool get isActive => endOfCurrentSong || endsAt != null;
 }
