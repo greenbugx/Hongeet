@@ -120,7 +120,7 @@ This project wouldn’t exist without these amazing open-source libraries:
 <div align="center">
 
   ## 📜 License
-  *Licensed under GNU-AGPLv3.* [View License](LICENSE)
+  *Licensed under*  <img src="https://www.gnu.org/graphics/agplv3-with-text-162x68.png" /> <br> [View License](LICENSE)
 
   <br>
 
