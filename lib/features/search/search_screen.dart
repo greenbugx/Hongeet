@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:marquee/marquee.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:hongit/core/theme/app_theme.dart';
 import 'package:hongit/core/utils/audio_player_service.dart';
@@ -10,12 +11,15 @@ import 'package:hongit/data/api/saavn_api.dart';
 import 'package:hongit/data/api/youtube_api.dart';
 import 'package:hongit/data/models/saavn_song.dart';
 import 'package:hongit/features/search/widgets/song_card.dart';
+import 'package:hongit/features/search/chart_songs_screen.dart';
 import 'package:hongit/features/library/local_audio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/utils/glass_container.dart';
 import '../../core/utils/glass_page.dart';
+import '../../core/utils/youtube_thumbnail_utils.dart';
+import '../../core/widgets/fallback_network_image.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -24,8 +28,8 @@ class SearchScreen extends StatefulWidget {
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
-  // ...existing code...
+class _SearchScreenState extends State<SearchScreen>
+    with AutomaticKeepAliveClientMixin<SearchScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ScrollController _chartsScrollController = ScrollController();
@@ -99,6 +103,10 @@ class _SearchScreenState extends State<SearchScreen> {
 
   late List<LocalAudioTrack> _localAudios = [];
   late Future<List<LocalAudioTrack>> _localAudiosFuture = Future.value([]);
+  Future<_HomeSectionsData>? _homeSectionsFuture;
+  bool _servicesReady = false;
+  bool _useYoutubeService = false;
+  bool _useSaavnService = false;
 
   bool get isSearching => _controller.text.trim().isNotEmpty;
 
@@ -112,16 +120,26 @@ class _SearchScreenState extends State<SearchScreen> {
     final prefs = await SharedPreferences.getInstance();
     final useYoutube = prefs.getBool('use_youtube_service') ?? false;
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+    if (!mounted) return;
     if (!useYoutube && !useSaavn) {
-      _localAudiosFuture = _loadLocalAudiosWithPermission();
+      setState(() {
+        _servicesReady = true;
+        _useYoutubeService = false;
+        _useSaavnService = false;
+        _homeSectionsFuture = null;
+        _localAudiosFuture = _loadLocalAudiosWithPermission();
+      });
       _localAudiosFuture.then((tracks) {
-        if (mounted) {
-          setState(() => _localAudios = tracks);
-        }
+        if (!mounted) return;
+        setState(() => _localAudios = tracks);
       });
     } else {
       setState(() {
+        _servicesReady = true;
+        _useYoutubeService = useYoutube;
+        _useSaavnService = useSaavn;
         _searchFuture = _performSearch(_quickPicksQuery);
+        _homeSectionsFuture = useYoutube ? _loadHomeSections() : null;
       });
     }
   }
@@ -157,10 +175,13 @@ class _SearchScreenState extends State<SearchScreen> {
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
     final query = _controller.text.trim();
     setState(() {
+      _servicesReady = true;
+      _useYoutubeService = useYoutube;
+      _useSaavnService = useSaavn;
       if (query.isEmpty) {
         _lastQuery = '';
         if (!useYoutube && !useSaavn) {
-          // Reload local audios when in local-only mode
+          _homeSectionsFuture = null;
           _searchFuture = null;
           _localAudiosFuture = _loadLocalAudiosWithPermission();
           _localAudiosFuture.then((tracks) {
@@ -169,6 +190,9 @@ class _SearchScreenState extends State<SearchScreen> {
           });
         } else {
           _searchFuture = _performSearch(_quickPicksQuery, forceRefresh: true);
+          _homeSectionsFuture = useYoutube
+              ? _loadHomeSections(forceRefresh: true)
+              : null;
         }
       } else if (query.length < minSearchLength) {
         _searchFuture = null;
@@ -216,7 +240,7 @@ class _SearchScreenState extends State<SearchScreen> {
     final prefs = await SharedPreferences.getInstance();
     final useYoutube = prefs.getBool('use_youtube_service') ?? false;
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
-    // If neither streaming service is enabled, do not perform network searches
+
     if (!useYoutube && !useSaavn) return const [];
     final isQuickPicksQuery = normalizedQuery.toLowerCase() == _quickPicksQuery;
     final cacheKey =
@@ -268,7 +292,6 @@ class _SearchScreenState extends State<SearchScreen> {
         AppLogger.info('Using Saavn service for search: "$normalizedQuery"');
         songs = await SaavnApi.searchSongs(normalizedQuery);
       } else {
-        // No streaming service enabled; return empty result.
         return const [];
       }
 
@@ -326,7 +349,10 @@ class _SearchScreenState extends State<SearchScreen> {
     final baseSongs = preFiltered ? songs : _applyGlobalResultFilter(songs);
     if (baseSongs.isEmpty) return const [];
 
-    final scored = baseSongs
+    final dedupedSongs = _dedupeSongsForQuickPicks(baseSongs);
+    if (dedupedSongs.isEmpty) return const [];
+
+    final scored = dedupedSongs
         .map((song) => _ScoredSong(song: song, score: _quickPickScore(song)))
         .toList(growable: false);
 
@@ -353,6 +379,69 @@ class _SearchScreenState extends State<SearchScreen> {
         .take(_quickPicksTargetCount)
         .map((e) => e.song)
         .toList(growable: false);
+  }
+
+  List<SaavnSong> _dedupeSongsForQuickPicks(List<SaavnSong> songs) {
+    if (songs.isEmpty) return const [];
+
+    final out = <SaavnSong>[];
+    final seenIds = <String>{};
+    final seenContent = <String>{};
+
+    for (final song in songs) {
+      final id = song.id.trim().toLowerCase();
+      if (id.isNotEmpty && !seenIds.add(id)) continue;
+
+      final key = _quickPickContentKey(song);
+      if (key.isNotEmpty && !seenContent.add(key)) continue;
+
+      out.add(song);
+    }
+    return out;
+  }
+
+  String _quickPickContentKey(SaavnSong song) {
+    final title = _normalizeQuickPickTitle(song.name);
+    if (title.isEmpty) return '';
+    final artist = _normalizeQuickPickArtist(song.artists);
+    return '$title::$artist';
+  }
+
+  String _normalizeQuickPickTitle(String raw) {
+    var title = raw.toLowerCase().trim();
+    if (title.isEmpty) return '';
+
+    title = title.replaceAll(RegExp(r'[\(\[\{].*?[\)\]\}]'), ' ');
+    title = title.replaceAll(
+      RegExp(
+        r'\b(official|audio|video|lyrics?|lyric|full\s*song|visualizer|4k|8k|hd)\b',
+      ),
+      ' ',
+    );
+    title = title.replaceAll(RegExp(r'\b(feat|ft)\.?\b.*$'), ' ');
+    title = title.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+    title = title.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return title;
+  }
+
+  String _normalizeQuickPickArtist(String raw) {
+    var text = raw.toLowerCase().trim();
+    if (text.isEmpty || text == 'unknown') return '';
+
+    text = text.replaceAll('&', ',');
+    text = text.replaceAll(RegExp(r'\b(and|with|x)\b'), ',');
+    text = text.replaceAll(RegExp(r'\b(feat|ft)\.?\b'), ',');
+
+    final parts = text
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .map((e) => e.replaceAll(RegExp(r'[^a-z0-9 ]+'), ' ').trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+
+    if (parts.isEmpty) return '';
+    return parts.first.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   int _quickPickScore(SaavnSong song) {
@@ -465,7 +554,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
   bool _containsEmoji(String value) {
     for (final rune in value.runes) {
-      // broad emoji ranges & dingbats or symbol blocks commonly used in spam titles
       final isEmoji =
           (rune >= 0x1F300 && rune <= 0x1FAFF) ||
           (rune >= 0x2600 && rune <= 0x27BF) ||
@@ -593,20 +681,139 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
+  Future<List<SaavnSong>> _loadTrendingSongs({
+    bool forceRefresh = false,
+  }) async {
+    final collected = <SaavnSong>[];
+    final seenIds = <String>{};
+    final seenKeys = <String>{};
+
+    String contentKey(SaavnSong song) {
+      final title = song.name.trim().toLowerCase();
+      final artist = song.artists.trim().toLowerCase();
+      return '$title::$artist';
+    }
+
+    bool looksLikeSingleSong(SaavnSong song) {
+      final text = '${song.name} ${song.artists}'.toLowerCase();
+      const blocked = <String>[
+        'full album',
+        'podcast',
+        'episode',
+        'interview',
+        'reaction',
+        'playlist',
+      ];
+      if (blocked.any(text.contains)) return false;
+      final duration = song.duration ?? 0;
+      if (duration > 0 && duration > 15 * 60) return false;
+      return true;
+    }
+
+    for (final query in _trendingSongsQueries) {
+      List<SaavnSong> batch = const <SaavnSong>[];
+      try {
+        batch = await _performSearch(query, forceRefresh: forceRefresh);
+      } catch (_) {
+        continue;
+      }
+
+      for (final song in batch) {
+        if (!looksLikeSingleSong(song)) continue;
+        final id = song.id.trim().toLowerCase();
+        if (id.isNotEmpty && !seenIds.add(id)) continue;
+        final key = contentKey(song);
+        if (key.isNotEmpty && !seenKeys.add(key)) continue;
+        collected.add(song);
+        if (collected.length >= _trendingSongsTargetCount) {
+          return collected;
+        }
+      }
+    }
+
+    if (collected.length < _trendingSongsTargetCount) {
+      final fallbackQueries = <String>[
+        _quickPicksQuery,
+        'latest songs',
+        'popular songs',
+      ];
+      for (final query in fallbackQueries) {
+        List<SaavnSong> batch = const <SaavnSong>[];
+        try {
+          batch = await _performSearch(query, forceRefresh: forceRefresh);
+        } catch (_) {
+          continue;
+        }
+        for (final song in batch) {
+          if (!looksLikeSingleSong(song)) continue;
+          final id = song.id.trim().toLowerCase();
+          if (id.isNotEmpty && !seenIds.add(id)) continue;
+          final key = contentKey(song);
+          if (key.isNotEmpty && !seenKeys.add(key)) continue;
+          collected.add(song);
+          if (collected.length >= _trendingSongsTargetCount) {
+            return collected;
+          }
+        }
+      }
+    }
+
+    if (collected.isNotEmpty) {
+      return collected.take(_trendingSongsTargetCount).toList(growable: false);
+    }
+
+    try {
+      final fallback = await _performSearch(
+        _quickPicksQuery,
+        forceRefresh: forceRefresh,
+      );
+      return fallback.take(_trendingSongsTargetCount).toList(growable: false);
+    } catch (_) {
+      return const <SaavnSong>[];
+    }
+  }
+
+  Future<_HomeSectionsData> _loadHomeSections({
+    bool forceRefresh = false,
+  }) async {
+    final chartsTask = YoutubeApi.charts(
+      take: _chartsTargetCount,
+      forceRefresh: forceRefresh,
+    ).catchError((_) => const <YtmChart>[]);
+    final albumsTask = YoutubeApi.trendingAlbums(
+      take: _albumsTargetCount,
+      forceRefresh: forceRefresh,
+    ).catchError((_) => const <YtmAlbum>[]);
+    final songsTask = _loadTrendingSongs(
+      forceRefresh: forceRefresh,
+    ).catchError((_) => const <SaavnSong>[]);
+
+    final charts = await chartsTask;
+    final albums = await albumsTask;
+    final trendingSongs = await songsTask;
+
+    return _HomeSectionsData(
+      charts: charts,
+      albums: albums,
+      trendingSongs: trendingSongs,
+    );
+  }
+
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     final trimmed = query.trim();
 
     if (trimmed.isEmpty) {
-      // Decide behavior based on enabled services: show quick-picks when
-      // streaming is enabled, otherwise clear search (local list shown).
       SharedPreferences.getInstance().then((prefs) {
         final useYoutube = prefs.getBool('use_youtube_service') ?? false;
         final useSaavn = prefs.getBool('use_saavn_service') ?? false;
         setState(() {
+          _servicesReady = true;
+          _useYoutubeService = useYoutube;
+          _useSaavnService = useSaavn;
           _lastQuery = '';
           if (!useYoutube && !useSaavn) {
-            // Clear search results and (re)load local audios.
+            _homeSectionsFuture = null;
             _searchFuture = null;
             _localAudiosFuture = _loadLocalAudiosWithPermission();
             _localAudiosFuture.then((tracks) {
@@ -615,6 +822,7 @@ class _SearchScreenState extends State<SearchScreen> {
             });
           } else {
             _searchFuture = _performSearch(_quickPicksQuery);
+            _homeSectionsFuture = useYoutube ? _loadHomeSections() : null;
           }
         });
       });
@@ -631,11 +839,14 @@ class _SearchScreenState extends State<SearchScreen> {
 
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (trimmed == _lastQuery) return;
-      // Choose local search when both streaming services are off.
+
       SharedPreferences.getInstance().then((prefs) {
         final useYoutube = prefs.getBool('use_youtube_service') ?? false;
         final useSaavn = prefs.getBool('use_saavn_service') ?? false;
         setState(() {
+          _servicesReady = true;
+          _useYoutubeService = useYoutube;
+          _useSaavnService = useSaavn;
           _lastQuery = trimmed;
           if (!useYoutube && !useSaavn) {
             _searchFuture = _searchLocalAudios(trimmed);
@@ -658,22 +869,18 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final animateSectionHeader = perfMode == UiPerformanceMode.full;
 
-    return FutureBuilder<Map<String, bool>>(
-      future: SharedPreferences.getInstance().then(
-        (prefs) => {
-          'use_youtube_service': prefs.getBool('use_youtube_service') ?? false,
-          'use_saavn_service': prefs.getBool('use_saavn_service') ?? false,
-        },
-      ),
-      builder: (context, snapshot) {
-        final useYoutube = snapshot.data?['use_youtube_service'] ?? false;
-        final useSaavn = snapshot.data?['use_saavn_service'] ?? false;
-        final isLocalMode = !useYoutube && !useSaavn;
+    if (!_servicesReady) {
+      return const GlassPage(child: Center(child: CircularProgressIndicator()));
+    }
 
     final useYoutube = _useYoutubeService;
     final useSaavn = _useSaavnService;
@@ -1435,8 +1642,6 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    // If no query, use the already-loaded local audio list (avoids triggering
-    // a network search and ensures the home/Search screen shows local files).
     if (query.isEmpty) {
       final results = _localAudios
           .map(
@@ -1473,50 +1678,48 @@ class _SearchScreenState extends State<SearchScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: GlassContainer(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              song.name,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () async {
+                    await AudioPlayerService().playLocalFiles(
+                      files: results
+                          .map((s) => (path: s.id, name: s.name))
+                          .toList(),
+                      startIndex: index,
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                song.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Local Audio',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white54,
+                              const SizedBox(height: 4),
+                              Text(
+                                'Local Audio',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white54,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(CupertinoIcons.play_fill),
-                        onPressed: () async {
-                          await AudioPlayerService().playLocalFiles(
-                            files: results
-                                .map((s) => (path: s.id, name: s.name))
-                                .toList(),
-                            startIndex: index,
-                          );
-                        },
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1526,7 +1729,6 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    // Otherwise perform the existing search-backed flow.
     return FutureBuilder<List<SaavnSong>>(
       future: _searchFuture,
       builder: (context, snapshot) {
@@ -1566,50 +1768,48 @@ class _SearchScreenState extends State<SearchScreen> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: GlassContainer(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                song.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () async {
+                      await AudioPlayerService().playLocalFiles(
+                        files: results
+                            .map((s) => (path: s.id, name: s.name))
+                            .toList(),
+                        startIndex: index,
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  song.name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Local Audio',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white54,
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Local Audio',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white54,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        IconButton(
-                          icon: const Icon(CupertinoIcons.play_fill),
-                          onPressed: () async {
-                            await AudioPlayerService().playLocalFiles(
-                              files: results
-                                  .map((s) => (path: s.id, name: s.name))
-                                  .toList(),
-                              startIndex: index,
-                            );
-                          },
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1774,9 +1974,68 @@ class _SessionSearchCacheEntry {
   const _SessionSearchCacheEntry({required this.songs});
 }
 
+class _HomeSectionsData {
+  final List<YtmChart> charts;
+  final List<YtmAlbum> albums;
+  final List<SaavnSong> trendingSongs;
+
+  const _HomeSectionsData({
+    required this.charts,
+    required this.albums,
+    required this.trendingSongs,
+  });
+
+  const _HomeSectionsData.empty()
+    : charts = const <YtmChart>[],
+      albums = const <YtmAlbum>[],
+      trendingSongs = const <SaavnSong>[];
+}
+
 class _ScoredSong {
   final SaavnSong song;
   final int score;
 
   const _ScoredSong({required this.song, required this.score});
+}
+
+class _AutoMarqueeText extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+
+  const _AutoMarqueeText({required this.text, required this.style});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          maxLines: 1,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+
+        if (!painter.didExceedMaxLines) {
+          return Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          );
+        }
+
+        return Marquee(
+          text: text,
+          style: style,
+          blankSpace: 28,
+          velocity: 22,
+          pauseAfterRound: const Duration(milliseconds: 900),
+          startPadding: 2,
+          fadingEdgeStartFraction: 0.08,
+          fadingEdgeEndFraction: 0.08,
+          accelerationDuration: const Duration(milliseconds: 250),
+          decelerationDuration: const Duration(milliseconds: 250),
+        );
+      },
+    );
+  }
 }
