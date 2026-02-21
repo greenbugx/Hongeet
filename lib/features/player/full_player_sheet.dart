@@ -418,7 +418,7 @@ class FullPlayerSheet extends StatelessWidget {
                     YoutubeThumbnailUtils.preferredArtworkScale(
                       songId: currentSong?.id,
                       imageUrl: now.imageUrl,
-                      youtubeVideoScale: 1.9,
+                      youtubeVideoScale: 1.0,
                       normalScale: 1.0,
                     );
                 final currentArtCandidates =
@@ -998,7 +998,7 @@ class FullPlayerSheet extends StatelessWidget {
                                                       .song
                                                       .meta
                                                       .imageUrl,
-                                                  youtubeVideoScale: 1.9,
+                                                  youtubeVideoScale: 1.0,
                                                   normalScale: 1.0,
                                                 ),
                                             child: FallbackNetworkImage(
@@ -1217,6 +1217,26 @@ class _QueuedDownloadTask {
 }
 
 void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
+  final stableContext = context;
+  final rootNavigator = Navigator.of(stableContext, rootNavigator: true);
+  final useGlassTheme = Provider.of<ThemeProvider>(
+    context,
+    listen: false,
+  ).useGlassTheme;
+  final addedInSheet = <String>{};
+
+  IconData playlistIcon() {
+    return useGlassTheme
+        ? CupertinoIcons.music_note_list
+        : Icons.playlist_add_rounded;
+  }
+
+  IconData addedIcon() {
+    return useGlassTheme
+        ? CupertinoIcons.check_mark_circled_solid
+        : Icons.check_circle;
+  }
+
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -1346,57 +1366,8 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-
-                if (playlists.isEmpty)
-                  const Text(
-                    'No playlists yet',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-
-                ...playlists.keys
-                    .where((name) => name != PlaylistManager.systemFavourites)
-                    .map(
-                      (name) => ListTile(
-                        leading: const Icon(CupertinoIcons.music_note_list),
-                        title: Text(name),
-                        onTap: () async {
-                          final navigator = Navigator.of(context);
-                          final success = await PlaylistManager.addSong(name, {
-                            'id': song.id,
-                            'title': song.meta.title,
-                            'artist': song.meta.artist,
-                            'imageUrl': song.meta.imageUrl,
-                          });
-
-                          navigator.pop();
-
-                          if (success) {
-                            AppMessenger.show(
-                              'Added to "$name"',
-                              color: Colors.green.shade700,
-                            );
-                          } else {
-                            AppMessenger.show(
-                              'Already in "$name"',
-                              color: Colors.orange.shade700,
-                            );
-                          }
-                        },
-                      ),
-                    ),
-
-                const SizedBox(height: 8),
-
-                TextButton(
-                  onPressed: () async {
-                    Navigator.pop(context);
-                    _showCreatePlaylistDialog(context);
-                  },
-                  child: const Text('＋ Create new playlist'),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       );
@@ -1407,7 +1378,7 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
 void _showCreatePlaylistDialog(BuildContext context) {
   final controller = TextEditingController();
 
-  showDialog(
+  showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       scrollable: true,
@@ -1418,7 +1389,10 @@ void _showCreatePlaylistDialog(BuildContext context) {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            FocusScope.of(dialogContext).unfocus();
+            Navigator.of(dialogContext).pop();
+          },
           child: const Text('Cancel'),
         ),
         TextButton(
@@ -1426,9 +1400,10 @@ void _showCreatePlaylistDialog(BuildContext context) {
             final name = controller.text.trim();
             if (name.isEmpty) return;
 
-            final navigator = Navigator.of(context);
+            FocusScope.of(dialogContext).unfocus();
             await PlaylistManager.create(name);
-            navigator.pop();
+            if (!dialogContext.mounted) return;
+            Navigator.of(dialogContext).pop();
             AppMessenger.show(
               'Playlist "$name" created',
               color: Colors.green.shade700,
