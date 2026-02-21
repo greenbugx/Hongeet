@@ -27,6 +27,9 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   // ...existing code...
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final ScrollController _chartsScrollController = ScrollController();
+  final ScrollController _albumsScrollController = ScrollController();
   Future<List<SaavnSong>>? _searchFuture;
   String _lastQuery = '';
   Timer? _debounce;
@@ -37,6 +40,18 @@ class _SearchScreenState extends State<SearchScreen> {
   static const String _quickPicksCacheDataPrefix = 'quick_picks_cache_v2_';
   static const String _quickPicksCacheTsPrefix = 'quick_picks_cache_ts_v2_';
   static const int _quickPicksTargetCount = 24;
+  static const int _chartsTargetCount = 10;
+  static const int _albumsTargetCount = 10;
+  static const int _trendingSongsTargetCount = 12;
+  static const double _chartsSectionBodyHeight = 240;
+  static const double _albumsSectionBodyHeight = 240;
+  static const List<String> _trendingSongsQueries = <String>[
+    'trending in shorts',
+    'latest singles',
+    'today\'s top songs',
+    'viral songs',
+    'top songs',
+  ];
   static const List<String> _globallyBlockedTitleTokens = <String>[
     'trending',
     'new song',
@@ -634,6 +649,9 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _chartsScrollController.dispose();
+    _albumsScrollController.dispose();
+    _scrollController.dispose();
     _controller.dispose();
     _debounce?.cancel();
     super.dispose();
@@ -657,107 +675,748 @@ class _SearchScreenState extends State<SearchScreen> {
         final useSaavn = snapshot.data?['use_saavn_service'] ?? false;
         final isLocalMode = !useYoutube && !useSaavn;
 
-        return GlassPage(
-          child: RefreshIndicator(
-            onRefresh: _refreshSearch,
-            child: FutureBuilder<List<LocalAudioTrack>>(
-              future: isLocalMode ? _localAudiosFuture : null,
-              builder: (context, localSnapshot) {
-                if (isLocalMode &&
-                    localSnapshot.connectionState == ConnectionState.done &&
-                    localSnapshot.hasData) {
-                  _localAudios = localSnapshot.data ?? [];
-                }
+    final useYoutube = _useYoutubeService;
+    final useSaavn = _useSaavnService;
+    final isLocalMode = !useYoutube && !useSaavn;
+    final headerText = isSearching ? 'Search Results' : 'Quick Picks';
 
-                return ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  cacheExtent: 720,
+    return GlassPage(
+      child: RefreshIndicator(
+        onRefresh: _refreshSearch,
+        child: CustomScrollView(
+          key: const PageStorageKey<String>('search_screen_list'),
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          cacheExtent: 720,
+          slivers: [
+            const SliverToBoxAdapter(
+              child: Text(
+                'Welcome to\nHongeet',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 20)),
+            SliverToBoxAdapter(
+              child: GlassContainer(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    controller: _controller,
+                    onChanged: _onSearchChanged,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.search
+                            : Icons.search,
+                        color: Colors.white70,
+                      ),
+                      hintText: isLocalMode
+                          ? 'Search local audio...'
+                          : 'Search songs, artists...',
+                      hintStyle: const TextStyle(color: Colors.white54),
+                      border: InputBorder.none,
+                      suffixIcon: _controller.text.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(
+                                themeProvider.useGlassTheme
+                                    ? CupertinoIcons.clear_circled_solid
+                                    : Icons.close,
+                                color: Colors.white70,
+                              ),
+                              onPressed: () {
+                                _controller.clear();
+                                _onSearchChanged('');
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+
+            if (!isLocalMode || isSearching) ...[
+              SliverToBoxAdapter(
+                child: animateSectionHeader
+                    ? AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: Text(
+                          headerText,
+                          key: ValueKey(headerText),
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      )
+                    : Text(
+                        headerText,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            ],
+
+            if (isLocalMode)
+              SliverToBoxAdapter(child: _buildLocalSearchResults(context))
+            else
+              _buildSearchResultsSliver(context),
+
+            if (!isLocalMode && !isSearching && useYoutube) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 30)),
+              _buildHomeSectionsSliver(context),
+            ],
+
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeSectionsSliver(BuildContext context) {
+    _homeSectionsFuture ??= _loadHomeSections();
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+
+    return FutureBuilder<_HomeSectionsData>(
+      future: _homeSectionsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return SliverList(
+            delegate: SliverChildListDelegate(<Widget>[
+              _buildSectionLoadingPlaceholder(
+                context,
+                title: 'Charts',
+                height: _chartsSectionBodyHeight,
+                topPadding: 0,
+              ),
+              _buildSectionLoadingPlaceholder(
+                context,
+                title: 'Trending Albums',
+                height: _albumsSectionBodyHeight,
+                topPadding: 24,
+              ),
+              _buildSectionLoadingPlaceholder(
+                context,
+                title: 'Trending Songs',
+                height: 900,
+                topPadding: 24,
+              ),
+            ]),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return SliverToBoxAdapter(
+            child: GlassContainer(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
                   children: [
-                    const Text(
-                      'Welcome to\nHongeet',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w600,
+                    Icon(
+                      themeProvider.useGlassTheme
+                          ? CupertinoIcons.exclamationmark_triangle
+                          : Icons.error_outline,
+                      color: Colors.white70,
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Failed to load home sections',
+                        style: TextStyle(color: Colors.white70),
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _homeSectionsFuture = _loadHomeSections(
+                            forceRefresh: true,
+                          );
+                        });
+                      },
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
 
-                    GlassContainer(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: TextField(
-                          controller: _controller,
-                          onChanged: _onSearchChanged,
-                          style: const TextStyle(color: Colors.white),
-                          decoration: InputDecoration(
-                            icon: Icon(
-                              themeProvider.useGlassTheme
-                                  ? CupertinoIcons.search
-                                  : Icons.search,
-                              color: Colors.white70,
-                            ),
-                            hintText: isLocalMode
-                                ? 'Search local audio...'
-                                : 'Search songs, artists...',
-                            hintStyle: const TextStyle(color: Colors.white54),
-                            border: InputBorder.none,
-                            suffixIcon: _controller.text.isNotEmpty
-                                ? IconButton(
-                                    icon: Icon(
-                                      themeProvider.useGlassTheme
-                                          ? CupertinoIcons.clear_circled_solid
-                                          : Icons.close,
-                                      color: Colors.white70,
+        final data = snapshot.data ?? const _HomeSectionsData.empty();
+        return SliverList(
+          delegate: SliverChildListDelegate(<Widget>[
+            _buildChartsSection(context, data.charts),
+            _buildTrendingAlbumsSection(context, data.albums),
+            _buildTrendingSongsSection(context, data.trendingSongs),
+          ]),
+        );
+      },
+    );
+  }
+
+  Widget _buildSectionLoadingPlaceholder(
+    BuildContext context, {
+    required String title,
+    required double? height,
+    required double topPadding,
+  }) {
+    final perfMode = Provider.of<ThemeProvider>(
+      context,
+      listen: false,
+    ).resolvedUiPerformanceMode(context);
+    final fullMode = perfMode == UiPerformanceMode.full;
+    return Padding(
+      padding: EdgeInsets.only(top: topPadding),
+      child: Column(
+        crossAxisAlignment: fullMode
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: Text(
+              title,
+              textAlign: fullMode ? TextAlign.center : TextAlign.start,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (height == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            SizedBox(
+              height: height,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChartsSection(BuildContext context, List<YtmChart> charts) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
+    final smoothMode = perfMode == UiPerformanceMode.smooth;
+    final fullMode = perfMode == UiPerformanceMode.full;
+
+    return Column(
+      crossAxisAlignment: fullMode
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: fullMode
+              ? AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: const Text(
+                    'Charts',
+                    key: ValueKey('charts_full'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                  ),
+                )
+              : const Text(
+                  'Charts',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: _chartsSectionBodyHeight,
+          child: charts.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No charts available right now',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                )
+              : ListView.separated(
+                  key: const PageStorageKey<String>('search_screen_charts_row'),
+                  controller: _chartsScrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.only(left: 2, right: 2, bottom: 8),
+                  cacheExtent: 900,
+                  addAutomaticKeepAlives: !smoothMode,
+                  addRepaintBoundaries: true,
+                  physics: smoothMode
+                      ? const ClampingScrollPhysics()
+                      : const BouncingScrollPhysics(
+                          parent: AlwaysScrollableScrollPhysics(),
+                        ),
+                  itemCount: charts.length,
+                  separatorBuilder: (_, index) => const SizedBox(width: 14),
+                  itemBuilder: (_, index) {
+                    final chart = charts[index];
+                    final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
+                      imageUrl: chart.imageUrl,
+                    );
+
+                    return SizedBox(
+                      width: 170,
+                      child: RepaintBoundary(
+                        child: GlassContainer(
+                          borderRadius: BorderRadius.circular(18),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) =>
+                                      ChartSongsScreen(chart: chart),
+                                ),
+                              );
+                            },
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                AspectRatio(
+                                  aspectRatio: 1,
+                                  child: ClipRRect(
+                                    clipBehavior: Clip.antiAlias,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(18),
                                     ),
-                                    onPressed: () {
-                                      _controller.clear();
-                                      _onSearchChanged('');
-                                    },
-                                  )
-                                : null,
+                                    child: FallbackNetworkImage(
+                                      urls: imageCandidates,
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      cacheWidth: 640,
+                                      cacheHeight: 640,
+                                      fit: BoxFit.cover,
+                                      filterQuality: FilterQuality.medium,
+                                      fallback: Container(
+                                        color: Colors.black26,
+                                        child: Icon(
+                                          themeProvider.useGlassTheme
+                                              ? CupertinoIcons.waveform
+                                              : Icons.equalizer_rounded,
+                                          size: 34,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Flexible(
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      10,
+                                      8,
+                                      10,
+                                      8,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        SizedBox(
+                                          height: 20,
+                                          child: _AutoMarqueeText(
+                                            text: chart.title,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          chart.subtitle,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrendingAlbumsSection(
+    BuildContext context,
+    List<YtmAlbum> albums,
+  ) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
+    final smoothMode = perfMode == UiPerformanceMode.smooth;
+    final fullMode = perfMode == UiPerformanceMode.full;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: fullMode
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: fullMode
+                ? AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: const Text(
+                      'Trending Albums',
+                      key: ValueKey('albums_full'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : const Text(
+                    'Trending Albums',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                  ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: _albumsSectionBodyHeight,
+            child: albums.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No trending albums right now',
+                      style: TextStyle(color: Colors.white60),
+                    ),
+                  )
+                : ListView.separated(
+                    key: const PageStorageKey<String>(
+                      'search_screen_albums_row',
+                    ),
+                    controller: _albumsScrollController,
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(
+                      left: 2,
+                      right: 2,
+                      bottom: 8,
+                    ),
+                    cacheExtent: 900,
+                    addAutomaticKeepAlives: !smoothMode,
+                    addRepaintBoundaries: true,
+                    physics: smoothMode
+                        ? const ClampingScrollPhysics()
+                        : const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                    itemCount: albums.length,
+                    separatorBuilder: (_, index) => const SizedBox(width: 14),
+                    itemBuilder: (_, index) {
+                      final album = albums[index];
+                      final allImageCandidates =
+                          YoutubeThumbnailUtils.candidateUrls(
+                            imageUrl: album.imageUrl,
+                          );
+                      final ytmOnlyCandidates = allImageCandidates
+                          .where(YoutubeThumbnailUtils.isYtmArtworkUrl)
+                          .toList(growable: false);
+                      final imageCandidates = ytmOnlyCandidates.isNotEmpty
+                          ? ytmOnlyCandidates
+                          : allImageCandidates;
+                      final baseImageScale =
+                          YoutubeThumbnailUtils.preferredArtworkScale(
+                            imageUrl: album.imageUrl,
+                            youtubeVideoScale: 2.0,
+                            normalScale: 1.0,
+                          );
+                      final imageScale = ytmOnlyCandidates.isNotEmpty
+                          ? (baseImageScale < 1.04 ? 1.04 : baseImageScale)
+                          : (baseImageScale < 1.12 ? 1.12 : baseImageScale);
+                      final albumAsChart = YtmChart(
+                        playlistId: album.browseId,
+                        browseId: album.browseId,
+                        title: album.title,
+                        subtitle: album.subtitle,
+                        imageUrl: album.imageUrl,
+                      );
+
+                      return SizedBox(
+                        width: 170,
+                        child: RepaintBoundary(
+                          child: GlassContainer(
+                            borderRadius: BorderRadius.circular(18),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => ChartSongsScreen(
+                                      chart: albumAsChart,
+                                      headerTitle: 'Albums',
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  AspectRatio(
+                                    aspectRatio: 1,
+                                    child: ClipRRect(
+                                      clipBehavior: Clip.antiAlias,
+                                      borderRadius: const BorderRadius.vertical(
+                                        top: Radius.circular(18),
+                                      ),
+                                      child: Transform.scale(
+                                        scale: imageScale,
+                                        child: FallbackNetworkImage(
+                                          urls: imageCandidates,
+                                          width: double.infinity,
+                                          height: double.infinity,
+                                          cacheWidth: 768,
+                                          cacheHeight: 768,
+                                          fit: BoxFit.cover,
+                                          alignment: Alignment.center,
+                                          filterQuality: FilterQuality.medium,
+                                          fallback: Container(
+                                            color: Colors.black26,
+                                            child: Icon(
+                                              themeProvider.useGlassTheme
+                                                  ? CupertinoIcons.music_albums
+                                                  : Icons.album_rounded,
+                                              size: 34,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Flexible(
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        10,
+                                        8,
+                                        10,
+                                        8,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          SizedBox(
+                                            height: 20,
+                                            child: _AutoMarqueeText(
+                                              text: album.title,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            album.subtitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrendingSongsSection(
+    BuildContext context,
+    List<SaavnSong> songs,
+  ) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    final perfMode = themeProvider.resolvedUiPerformanceMode(context);
+    final fullMode = perfMode == UiPerformanceMode.full;
+    final queuedSongs = songs
+        .map(
+          (s) => QueuedSong(
+            id: s.id,
+            meta: NowPlaying(
+              title: s.name,
+              artist: s.artists,
+              imageUrl: s.imageUrl,
+            ),
+          ),
+        )
+        .toList(growable: false);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: fullMode
+            ? CrossAxisAlignment.center
+            : CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: fullMode
+                ? AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: const Text(
+                      'Trending Songs',
+                      key: ValueKey('trending_songs_full'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                : const Text(
+                    'Trending Songs',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                  ),
+          ),
+          const SizedBox(height: 16),
+          if (songs.isEmpty)
+            const Center(
+              child: Text(
+                'No trending songs right now',
+                style: TextStyle(color: Colors.white60),
+              ),
+            )
+          else
+            Column(
+              children: List<Widget>.generate(songs.length, (index) {
+                final song = songs[index];
+                final imageCandidates = YoutubeThumbnailUtils.candidateUrls(
+                  songId: song.id,
+                  imageUrl: song.imageUrl,
+                );
+                final imageScale = YoutubeThumbnailUtils.preferredArtworkScale(
+                  songId: song.id,
+                  imageUrl: song.imageUrl,
+                  youtubeVideoScale: 1.0,
+                  normalScale: 1.0,
+                );
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    bottom: index == songs.length - 1 ? 0 : 10,
+                  ),
+                  child: RepaintBoundary(
+                    child: GlassContainer(
+                      borderRadius: BorderRadius.circular(14),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () async {
+                          if (index < 0 || index >= queuedSongs.length) return;
+                          await AudioPlayerService().playFromList(
+                            songs: queuedSongs,
+                            startIndex: index,
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            children: [
+                              ClipRRect(
+                                clipBehavior: Clip.antiAlias,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Transform.scale(
+                                  scale: imageScale,
+                                  child: FallbackNetworkImage(
+                                    urls: imageCandidates,
+                                    width: 56,
+                                    height: 56,
+                                    cacheWidth: 320,
+                                    cacheHeight: 320,
+                                    fit: BoxFit.cover,
+                                    alignment: Alignment.center,
+                                    filterQuality: FilterQuality.medium,
+                                    fallback: Container(
+                                      width: 56,
+                                      height: 56,
+                                      color: Colors.black26,
+                                      child: Icon(
+                                        themeProvider.useGlassTheme
+                                            ? CupertinoIcons.music_note_2
+                                            : Icons.music_note_rounded,
+                                        size: 24,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      song.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      song.artists,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
                     ),
-
-                    const SizedBox(height: 28),
-
-                    if (!isLocalMode || isSearching) ...[
-                      animateSectionHeader
-                          ? AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                isSearching ? 'Search Results' : 'Quick Picks',
-                                key: ValueKey(isSearching),
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            )
-                          : Text(
-                              isSearching ? 'Search Results' : 'Quick Picks',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Results
-                    isLocalMode
-                        ? _buildLocalSearchResults(context)
-                        : _buildSearchResults(context),
-
-                    const SizedBox(height: 80),
-                  ],
+                  ),
                 );
-              },
+              }),
             ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -962,16 +1621,18 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchResults(BuildContext context) {
+  Widget _buildSearchResultsSliver(BuildContext context) {
     final query = _controller.text.trim();
     if (query.isNotEmpty && query.length < minSearchLength) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            'Type at least $minSearchLength characters to search',
-            style: const TextStyle(color: Colors.white54, fontSize: 14),
-            textAlign: TextAlign.center,
+      return SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              'Type at least $minSearchLength characters to search',
+              style: const TextStyle(color: Colors.white54, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       );
@@ -987,56 +1648,65 @@ class _SearchScreenState extends State<SearchScreen> {
       future: _searchFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          );
         }
 
         if (snapshot.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Provider.of<ThemeProvider>(context).useGlassTheme
-                        ? CupertinoIcons.exclamationmark_triangle
-                        : Icons.error_outline,
-                    size: 48,
-                    color: Colors.red.shade300,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Failed to load songs',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Provider.of<ThemeProvider>(context).useGlassTheme
+                          ? CupertinoIcons.exclamationmark_triangle
+                          : Icons.error_outline,
+                      size: 48,
+                      color: Colors.red.shade300,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'API might be down or network issue',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 14),
-                  OutlinedButton(
-                    onPressed: _refreshSearch,
-                    child: const Text('Retry'),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Failed to load songs',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'API might be down or network issue',
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 14),
+                    OutlinedButton(
+                      onPressed: _refreshSearch,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
         }
 
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: Text(
-                'No results',
-                style: TextStyle(color: Colors.white70),
+          return const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text(
+                  'No results',
+                  style: TextStyle(color: Colors.white70),
+                ),
               ),
             ),
           );
@@ -1060,37 +1730,38 @@ class _SearchScreenState extends State<SearchScreen> {
             )
             .toList();
 
-        return GridView.builder(
+        return SliverPadding(
           padding: const EdgeInsets.only(bottom: 16),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          cacheExtent: 900,
-          addAutomaticKeepAlives: !smoothMode,
-          addRepaintBoundaries: true,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: 0.68,
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 16,
+              crossAxisSpacing: 16,
+              childAspectRatio: 0.68,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (_, i) {
+                final song = songs[i];
+
+                return RepaintBoundary(
+                  child: SongCard(
+                    song: song,
+                    onTap: () async {
+                      if (i < 0 || i >= queuedSongs.length) return;
+
+                      await AudioPlayerService().playFromList(
+                        songs: queuedSongs,
+                        startIndex: i,
+                      );
+                    },
+                  ),
+                );
+              },
+              childCount: songs.length,
+              addAutomaticKeepAlives: !smoothMode,
+              addRepaintBoundaries: true,
+            ),
           ),
-          itemCount: songs.length,
-          itemBuilder: (_, i) {
-            final song = songs[i];
-
-            return RepaintBoundary(
-              child: SongCard(
-                song: song,
-                onTap: () async {
-                  if (i < 0 || i >= queuedSongs.length) return;
-
-                  await AudioPlayerService().playFromList(
-                    songs: queuedSongs,
-                    startIndex: i,
-                  );
-                },
-              ),
-            );
-          },
         );
       },
     );

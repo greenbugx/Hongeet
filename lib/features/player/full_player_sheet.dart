@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui';
+import 'dart:collection';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:marquee/marquee.dart';
@@ -24,6 +25,12 @@ import '../../features/library/local_audio_provider.dart';
 
 class FullPlayerSheet extends StatelessWidget {
   const FullPlayerSheet({super.key});
+  static const int _maxConcurrentDownloads = 3;
+  static const int _queueFeedbackThreshold = 5;
+  static int _activeDownloadCount = 0;
+  static final Queue<_QueuedDownloadTask> _downloadQueue =
+      Queue<_QueuedDownloadTask>();
+  static final Set<String> _queuedOrActiveSongIds = <String>{};
 
   String _fmt(Duration d) {
     final m = d.inMinutes.remainder(60).toString();
@@ -31,8 +38,111 @@ class FullPlayerSheet extends StatelessWidget {
     return '$m:$s';
   }
 
+  String _sleepTimerLabel(SleepTimerStatus status) {
+    if (status.endOfCurrentSong) return 'After current song';
+    final endsAt = status.endsAt;
+    if (endsAt == null) return 'Off';
+    final remaining = endsAt.difference(DateTime.now());
+    if (remaining <= Duration.zero) return 'Off';
+    final mins = remaining.inMinutes;
+    final secs = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return mins > 0 ? '${mins}m ${secs}s' : '${remaining.inSeconds}s';
+  }
+
+  void _showSleepTimerSheet(
+    BuildContext context,
+    AudioPlayerService player,
+    bool useGlassTheme,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.black.withValues(alpha: 0.88),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Sleep Timer',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 6),
+              StreamBuilder<SleepTimerStatus>(
+                stream: player.sleepTimerStream,
+                initialData: player.sleepTimerStatus,
+                builder: (_, snap) => Text(
+                  'Current: ${_sleepTimerLabel(snap.data ?? const SleepTimerStatus.off())}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final mins in const [15, 30, 60])
+                    ActionChip(
+                      avatar: Icon(
+                        useGlassTheme
+                            ? CupertinoIcons.timer
+                            : Icons.timer_outlined,
+                        size: 16,
+                      ),
+                      label: Text('${mins}m'),
+                      onPressed: () {
+                        Navigator.of(sheetCtx).pop();
+                        player.setSleepTimer(Duration(minutes: mins));
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                leading: Icon(
+                  useGlassTheme
+                      ? CupertinoIcons.music_note
+                      : Icons.music_note_outlined,
+                ),
+                title: const Text('End of current song'),
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  player.setSleepTimerEndOfCurrentSong();
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  useGlassTheme
+                      ? CupertinoIcons.clear_circled
+                      : Icons.timer_off_outlined,
+                ),
+                title: const Text('Turn off timer'),
+                onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  player.clearSleepTimer();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _downloadSong(QueuedSong song) async {
-    // Only fetch stream URL / metadata when streaming is enabled
     await StreamingPreferences.reload();
     if (!StreamingPreferences.isStreamingEnabled) {
       AppMessenger.show(
@@ -42,30 +152,76 @@ class FullPlayerSheet extends StatelessWidget {
       return;
     }
 
-    AppMessenger.show(
-      'Downloading: ${song.meta.title}',
-      color: Colors.blueGrey.shade800,
-    );
-
-    try {
-      if (song.id.startsWith('yt:')) {
-        final videoId = song.id.substring(3);
-        final audioUrl = await YoutubeSongApi.fetchBestStreamUrl(videoId);
-        await LocalBackendApi.downloadDirect(
-          title: song.meta.title,
-          url: audioUrl,
-        );
-      } else {
-        await LocalBackendApi.downloadSaavn(
-          title: song.meta.title,
-          songId: song.id,
-        );
-      }
-
-      AppMessenger.show('Download complete', color: Colors.green.shade700);
-    } catch (_) {
-      AppMessenger.show('Download failed', color: Colors.red.shade700);
+    if (_queuedOrActiveSongIds.contains(song.id)) {
+      AppMessenger.show(
+        'Already queued: ${song.meta.title}',
+        color: Colors.orange.shade700,
+      );
+      return;
     }
+
+    _queuedOrActiveSongIds.add(song.id);
+    _downloadQueue.add(_QueuedDownloadTask(song: song));
+    final pendingTotal = _activeDownloadCount + _downloadQueue.length;
+
+    if (pendingTotal > _queueFeedbackThreshold) {
+      AppMessenger.show(
+        'Queued $pendingTotal downloads. Running $_maxConcurrentDownloads at a time.',
+        color: Colors.blueGrey.shade800,
+      );
+    } else {
+      AppMessenger.show(
+        'Added to queue: ${song.meta.title}',
+        color: Colors.blueGrey.shade800,
+      );
+    }
+
+    _pumpDownloadQueue();
+  }
+
+  void _pumpDownloadQueue() {
+    while (_activeDownloadCount < _maxConcurrentDownloads &&
+        _downloadQueue.isNotEmpty) {
+      final task = _downloadQueue.removeFirst();
+      _activeDownloadCount++;
+      _runDownloadTask(task);
+    }
+  }
+
+  void _runDownloadTask(_QueuedDownloadTask task) {
+    () async {
+      final song = task.song;
+      AppMessenger.show(
+        'Downloading: ${song.meta.title}',
+        color: Colors.blueGrey.shade800,
+      );
+
+      try {
+        if (song.id.startsWith('yt:')) {
+          final videoId = song.id.substring(3);
+          final audioUrl = await YoutubeSongApi.fetchBestStreamUrl(videoId);
+          await LocalBackendApi.downloadDirect(
+            title: song.meta.title,
+            url: audioUrl,
+          );
+        } else {
+          await LocalBackendApi.downloadSaavn(
+            title: song.meta.title,
+            songId: song.id,
+          );
+        }
+
+        AppMessenger.show('Download complete', color: Colors.green.shade700);
+      } catch (_) {
+        AppMessenger.show('Download failed', color: Colors.red.shade700);
+      } finally {
+        _queuedOrActiveSongIds.remove(song.id);
+        if (_activeDownloadCount > 0) {
+          _activeDownloadCount--;
+        }
+        _pumpDownloadQueue();
+      }
+    }();
   }
 
   bool _isDownloadedLocalTrack(QueuedSong? song) {
@@ -75,7 +231,6 @@ class FullPlayerSheet extends StatelessWidget {
         normalizedPath.startsWith('/storage/emulated/0/downloads/hongit/');
   }
 
-  /// Check if a song is a local audio not a downloaded track (i.e. /downloads/hongeet/)
   bool _isLocalAudio(QueuedSong? song) {
     if (song == null || !song.isLocal) return false;
     return !_isDownloadedLocalTrack(song);
@@ -109,12 +264,10 @@ class FullPlayerSheet extends StatelessWidget {
 
     if (confirm != true) return;
 
-    // Remove from queue first, then delete file
     final wasRemoved = await player.removeSongFromQueue(song.id);
     await DownloadedSongsProvider.delete(song.id);
 
     if (!wasRemoved) {
-      // If song wasn't in queue, just stop if it was playing
       final currentIndex = player.currentIndex;
       final queue = player.queue;
       if (currentIndex != null &&
@@ -134,7 +287,6 @@ class FullPlayerSheet extends StatelessWidget {
     }
   }
 
-  /// Delete a local audio file from device storage.
   Future<void> _deleteLocalAudio(
     BuildContext context,
     QueuedSong song,
@@ -164,7 +316,6 @@ class FullPlayerSheet extends StatelessWidget {
     if (confirm != true) return;
 
     try {
-      // Request storage permission for Android 11+
       if (Platform.isAndroid) {
         final status = await Permission.manageExternalStorage.request();
 
@@ -186,14 +337,10 @@ class FullPlayerSheet extends StatelessWidget {
         }
       }
 
-      // print('Attempting to delete: ${song.id}');
-      // print('File exists: ${File(song.id).existsSync()}');
-
       final file = File(song.id);
 
       if (file.existsSync()) {
         try {
-          // Check if this song is currently playing before removing from queue
           final currentIndex = player.currentIndex;
           final queue = player.queue;
           final isCurrentSong =
@@ -202,21 +349,16 @@ class FullPlayerSheet extends StatelessWidget {
               currentIndex < queue.length &&
               queue[currentIndex].id == song.id;
 
-          // Remove from queue
           await player.removeSongFromQueue(song.id);
 
-          // If it was the current song and removal didn't auto-advance, ensure stopped
           if (isCurrentSong && player.queue.isEmpty) {
             await player.stopAndClearNowPlaying();
           }
 
-          // Allow file handle to be released
           await Future.delayed(const Duration(milliseconds: 100));
 
           await file.delete();
-          // print('Deleted successfully');
 
-          // Notify listeners that local audios have changed
           LocalAudioProvider.notifyChanged();
 
           AppMessenger.show(
@@ -224,7 +366,6 @@ class FullPlayerSheet extends StatelessWidget {
             color: Colors.redAccent.shade700,
           );
         } catch (e) {
-          // print('Deletion failed: $e');
           AppMessenger.show(
             'Failed to delete file',
             color: Colors.red.shade700,
@@ -238,7 +379,6 @@ class FullPlayerSheet extends StatelessWidget {
         Navigator.of(context).maybePop();
       }
     } catch (e) {
-      // print('Delete error: ${e.toString()}');
       AppMessenger.show('Error: ${e.toString()}', color: Colors.red.shade700);
     }
   }
@@ -329,7 +469,6 @@ class FullPlayerSheet extends StatelessWidget {
                                   padding: const EdgeInsets.all(20),
                                   child: Column(
                                     children: [
-                                      /// Drag handle
                                       Container(
                                         width: 36,
                                         height: 4,
@@ -375,7 +514,6 @@ class FullPlayerSheet extends StatelessWidget {
 
                                       const SizedBox(height: 20),
 
-                                      /// Title
                                       SizedBox(
                                         height: 26,
                                         child: _AutoMarqueeText(
@@ -389,7 +527,6 @@ class FullPlayerSheet extends StatelessWidget {
 
                                       const SizedBox(height: 6),
 
-                                      /// Artist
                                       SizedBox(
                                         height: 20,
                                         child: _AutoMarqueeText(
@@ -403,7 +540,6 @@ class FullPlayerSheet extends StatelessWidget {
 
                                       const SizedBox(height: 20),
 
-                                      /// Seek bar
                                       StreamBuilder<bool>(
                                         stream: player.trackLoadingStream,
                                         initialData: player.isTrackLoading,
@@ -503,7 +639,6 @@ class FullPlayerSheet extends StatelessWidget {
 
                                       const SizedBox(height: 12),
 
-                                      // Controls
                                       Column(
                                         children: [
                                           Row(
@@ -703,7 +838,6 @@ class FullPlayerSheet extends StatelessWidget {
                                           if (hasRemoteTrack) ...[
                                             const SizedBox(height: 8),
 
-                                            // Secondary controls (only for streamed tracks)
                                             Row(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
@@ -769,7 +903,45 @@ class FullPlayerSheet extends StatelessWidget {
                                                     );
                                                   },
                                                 ),
-                                                const SizedBox(width: 24),
+                                                const SizedBox(width: 12),
+                                                StreamBuilder<SleepTimerStatus>(
+                                                  stream:
+                                                      player.sleepTimerStream,
+                                                  initialData:
+                                                      player.sleepTimerStatus,
+                                                  builder: (_, snap) {
+                                                    final timerStatus =
+                                                        snap.data ??
+                                                        const SleepTimerStatus.off();
+                                                    return IconButton(
+                                                      tooltip:
+                                                          timerStatus.isActive
+                                                          ? 'Sleep timer: ${_sleepTimerLabel(timerStatus)}'
+                                                          : 'Sleep timer',
+                                                      icon: Icon(
+                                                        theme.useGlassTheme
+                                                            ? CupertinoIcons
+                                                                  .moon
+                                                            : Icons
+                                                                  .bedtime_outlined,
+                                                        color:
+                                                            timerStatus.isActive
+                                                            ? Colors
+                                                                  .lightBlueAccent
+                                                            : Colors.white70,
+                                                      ),
+                                                      iconSize: 26,
+                                                      onPressed: () {
+                                                        _showSleepTimerSheet(
+                                                          context,
+                                                          player,
+                                                          theme.useGlassTheme,
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                ),
+                                                const SizedBox(width: 12),
                                                 IconButton(
                                                   icon: Icon(
                                                     theme.useGlassTheme
@@ -1038,27 +1210,141 @@ class FullPlayerSheet extends StatelessWidget {
   }
 }
 
+class _QueuedDownloadTask {
+  final QueuedSong song;
+
+  const _QueuedDownloadTask({required this.song});
+}
+
 void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
   showModalBottomSheet(
     context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: Colors.black.withValues(alpha: 0.85),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) {
-      return StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
-        stream: PlaylistManager.stream,
-        builder: (_, snap) {
-          final playlists = snap.data ?? {};
+    builder: (sheetContext) {
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
+            stream: PlaylistManager.stream,
+            builder: (_, snap) {
+              final playlists = snap.data ?? {};
+              final playlistNames = playlists.keys
+                  .where((name) => name != PlaylistManager.systemFavourites)
+                  .toList(growable: false);
+              final mediaQuery = MediaQuery.of(sheetContext);
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Add to Playlist',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: mediaQuery.size.height * 0.75,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    12 + mediaQuery.viewPadding.bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      const Text(
+                        'Add to Playlist',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: playlistNames.isEmpty
+                            ? const Center(
+                                child: Text(
+                                  'No playlists yet',
+                                  style: TextStyle(color: Colors.white54),
+                                ),
+                              )
+                            : ListView(
+                                children: playlistNames
+                                    .map((name) {
+                                      final playlistSongs =
+                                          playlists[name] ?? const [];
+                                      final exists = playlistSongs.any(
+                                        (entry) =>
+                                            (entry['id'] ?? '')
+                                                .toString()
+                                                .trim() ==
+                                            song.id,
+                                      );
+                                      final added =
+                                          exists || addedInSheet.contains(name);
+
+                                      return ListTile(
+                                        leading: Icon(
+                                          added ? addedIcon() : playlistIcon(),
+                                          color: added
+                                              ? Colors.green.shade400
+                                              : null,
+                                        ),
+                                        title: Text(name),
+                                        onTap: () async {
+                                          if (added) {
+                                            AppMessenger.show(
+                                              'Already in "$name"',
+                                              color: Colors.orange.shade700,
+                                            );
+                                            return;
+                                          }
+
+                                          final success =
+                                              await PlaylistManager.addSong(
+                                                name,
+                                                {
+                                                  'id': song.id,
+                                                  'title': song.meta.title,
+                                                  'artist': song.meta.artist,
+                                                  'imageUrl':
+                                                      song.meta.imageUrl,
+                                                },
+                                              );
+                                          if (!context.mounted) return;
+
+                                          if (success) {
+                                            setModalState(
+                                              () => addedInSheet.add(name),
+                                            );
+                                            AppMessenger.show(
+                                              'Added to "$name"',
+                                              color: Colors.green.shade700,
+                                            );
+                                          } else {
+                                            AppMessenger.show(
+                                              'Already in "$name"',
+                                              color: Colors.orange.shade700,
+                                            );
+                                          }
+                                        },
+                                      );
+                                    })
+                                    .toList(growable: false),
+                              ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (!rootNavigator.mounted) return;
+                            _showCreatePlaylistDialog(rootNavigator.context);
+                          });
+                        },
+                        child: const Text('+ Create new playlist'),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -1123,7 +1409,8 @@ void _showCreatePlaylistDialog(BuildContext context) {
 
   showDialog(
     context: context,
-    builder: (_) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       title: const Text('New Playlist'),
       content: TextField(
         controller: controller,
@@ -1161,7 +1448,6 @@ class _UpcomingSong {
   _UpcomingSong({required this.song, required this.absoluteIndex});
 }
 
-/// Auto marquee
 class _AutoMarqueeText extends StatelessWidget {
   final String text;
   final TextStyle style;

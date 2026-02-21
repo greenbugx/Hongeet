@@ -14,11 +14,18 @@
   </p>
 
   [![GitHub Release](https://img.shields.io/github/v/release/greenbugx/Hongeet?style=for-the-badge&color=white)](https://github.com/greenbugx/Hongeet/releases)
-  [![License](https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=black)](LICENSE)
-  [![Downloads](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white)](https://sourceforge.net/projects/hongeet/)
+  [![License](https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=black)](LICENSE)<br>
+  [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Sourceforge%20Monthly%20Downloads)](https://sourceforge.net/projects/hongeet/)
+  [![IzzyOnDroid Monthly Downloads](https://img.shields.io/badge/dynamic/json?url=https://dlstats.izzyondroid.org/iod-stats-collector/stats/basic/monthly/rolling.json&query=$.['com.dxku.hongit']&label=IzzyOnDroid%20monthly%20downloads&style=for-the-badge&color=black)](https://apt.izzysoft.de/packages/com.dxku.hongit)
+
+  <br>
 
   <a href="https://sourceforge.net/projects/hongeet/files/latest/download">
-    <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width=300 srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
+      <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width="300" srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
+  </a>
+  <br>
+  <a href="https://apt.izzysoft.de/packages/com.dxku.hongit">
+    <img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroidButtonGreyBorder_nofont.png" height="53" alt="Get it at IzzyOnDroid">
   </a>
 
 </div>

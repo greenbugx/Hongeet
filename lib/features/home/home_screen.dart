@@ -30,12 +30,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     const navBottomPadding = 12.0;
-    const miniGapAboveNav = 20.0;
+    final samsungSafeBaseGap = (12.0 - (bottomInset * 0.2))
+        .clamp(4.0, 12.0)
+        .toDouble();
+    final nonSamsungLiftBoost = bottomInset >= 20.0 ? 0.0 : 10.0;
+    final samsungDownAdjust = bottomInset >= 20.0 ? -2.0 : 0.0;
+    final miniGapAboveNav =
+        (samsungSafeBaseGap + nonSamsungLiftBoost + samsungDownAdjust)
+            .clamp(3.0, 24.0)
+            .toDouble();
     final miniPlayerBottom =
-        kBottomNavigationBarHeight +
+        bottomInset +
         navBottomPadding +
-        miniGapAboveNav +
-        bottomInset;
+        kBottomNavigationBarHeight +
+        miniGapAboveNav;
 
     return FutureBuilder<Map<String, bool>>(
       future: SharedPreferences.getInstance().then(
@@ -51,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final tabs = <Widget>[
           SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
-          // Keep a placeholder in place of Library when in local-only mode so the tab indices remain stable and we don't force navigation
           isLocalMode
               ? const _DisabledLibraryPlaceholder()
               : const LibraryScreen(),

@@ -1,1 +1,1 @@
-Offline music player with optional YouTube Music & JioSaavn streaming with NO Ads
+Offline player with YT Music + JioSaavn streaming, downloads, and no ads.
