@@ -1,3 +1,24 @@
+# v1.5.0+15
+
+## Sleep Timer + Search/Home Feed Upgrade
+
+### BUG FIXES / IMPROVEMENTS
+
+- **Sleep Timer:** Added sleep timer controls (15m, 30m, 60m, end of current song) with live status and timer state handling
+- **Sleep Overlay:** Added full-screen sleep timer completion screen after timer stop
+- **Home:** Added new feed shelves - Charts, Trending Albums, and Trending Songs
+- **Charts/Albums:** Added dedicated open flow to list songs from a selected chart/album
+- **Artwork Quality:** Improved thumbnail fallback logic for chart/album songs to prefer cleaner, higher-quality art
+- **Performance:** Improved progressive song/art loading behavior and in-session caching for feed sections
+- **Scroll Stability:** Fixed major vertical scroll jump issues in Search feed sections
+- **UI Polish:** Improved mini-player/bottom-nav positioning across devices (including Samsung-safe layout cases)
+
+### UPCOMING (work in progress)
+
+- Expose sleep timer actions for local/downloaded tracks in full player controls
+- More queue prefetch/retry hardening for weak network conditions
+- Further low-end device transition/performance tuning
+
 # v1.4.0+14
 
 ## Offline-First Local Audio Player + Streaming Overhaul

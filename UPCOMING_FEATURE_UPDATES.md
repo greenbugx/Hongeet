@@ -11,29 +11,29 @@ The roadmap may evolve based on feasibility and user feedback.
 
 ## ✨ Planned Feature Additions (Minor Updates)
 
-These updates introduce new functionality and content without breaking existing behavior.
+These updates introduce new functionality and content without breaking existing behavior.]
 
 ### 🎵 Home & Discovery
-- Charts section for popular and trending songs
-- Trending artists showcase
-- Trending albums showcase
-- Fallback discovery logic if "Trending Songs (Quick Picks)" becomes empty  
+- [x] Charts section for popular and trending songs
+- [ ] Trending artists showcase
+- [x] Trending albums showcase
+- [ ] Fallback discovery logic if "Trending Songs (Quick Picks)" becomes empty  
   → Automatically fill using alternative searches like "New Songs" or similar
 
 ### 🔍 Search Enhancements
-- Genre suggestions when tapping the search bar
-- Expanded search results including:
+- [ ] Genre suggestions when tapping the search bar
+- [ ] Expanded search results including:
   - Albums
   - Artists
   - Additional matching content
 
 ### ▶ Playback & Queue Improvements
-- Play directly from albums (queue only songs within the selected album)
-- Smart queue recommendations based on recently played songs  
+- [x] Play directly from albums (queue only songs within the selected album)
+- [ ] Smart queue recommendations based on recently played songs  
   - Excludes downloaded-only playback (downloaded songs build queue locally)
 
 ### 🎮 Integrations
-- Discord Rich Presence support (if feasible)
+- [ ] Discord Rich Presence support (if feasible)
 
 ---
 
@@ -41,8 +41,8 @@ These updates introduce new functionality and content without breaking existing 
 
 These updates focus on speed, stability, and user experience.
 
-- Smoother performance on low-end devices
-- Faster downloads from YTM source (if possible)
-- General UI and playback optimizations
+- [x] Smoother performance on low-end devices
+- [ ] Faster downloads from YTM source (if possible)
+- [ ] General UI and playback optimizations
 
 ---
