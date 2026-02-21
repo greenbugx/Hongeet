@@ -30,6 +30,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     const navBottomPadding = 12.0;
+    final samsungSafeBaseGap = (12.0 - (bottomInset * 0.2))
+        .clamp(4.0, 12.0)
+        .toDouble();
+    final nonSamsungLiftBoost = bottomInset >= 20.0 ? 0.0 : 10.0;
+    final samsungDownAdjust = bottomInset >= 20.0 ? -2.0 : 0.0;
+    final miniGapAboveNav =
+        (samsungSafeBaseGap + nonSamsungLiftBoost + samsungDownAdjust)
+            .clamp(3.0, 24.0)
+            .toDouble();
+    final miniPlayerBottom =
+        bottomInset +
+        navBottomPadding +
+        kBottomNavigationBarHeight +
+        miniGapAboveNav;
 
     return FutureBuilder<Map<String, bool>>(
       future: SharedPreferences.getInstance().then(
@@ -45,7 +59,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final tabs = <Widget>[
           SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
-          // Keep a placeholder in place of Library when in local-only mode so the tab indices remain stable and we don't force navigation
           isLocalMode
               ? const _DisabledLibraryPlaceholder()
               : const LibraryScreen(),
@@ -56,71 +69,78 @@ class _HomeScreenState extends State<HomeScreen> {
         if (displayIndex >= tabs.length) displayIndex = 0;
 
         return Scaffold(
-          extendBody: false,
-          body: IndexedStack(
-            index: displayIndex,
-            children: List<Widget>.generate(
-              tabs.length,
-              (i) => RepaintBoundary(
-                child: TickerMode(enabled: i == displayIndex, child: tabs[i]),
-              ),
-            ),
-          ),
-          bottomNavigationBar: Column(
-            mainAxisSize: MainAxisSize.min,
+          extendBody: true,
+          body: Stack(
             children: [
-              const MiniPlayer(),
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  12,
-                  0,
-                  12,
-                  navBottomPadding + bottomInset,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    child: BottomNavigationBar(
-                      backgroundColor: Colors.transparent,
-                      elevation: 0,
-                      currentIndex: displayIndex,
-                      onTap: (i) {
-                        if (i == displayIndex) return;
-                        setState(() => _index = i);
-                      },
-                      items: [
-                        BottomNavigationBarItem(
-                          icon: Icon(
-                            themeProvider.useGlassTheme
-                                ? CupertinoIcons.search
-                                : Icons.search,
-                          ),
-                          label: 'Search',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(
-                            themeProvider.useGlassTheme
-                                ? CupertinoIcons.music_albums
-                                : Icons.library_music,
-                            color: isLocalMode ? Colors.white24 : null,
-                          ),
-                          label: 'Library',
-                        ),
-                        BottomNavigationBarItem(
-                          icon: Icon(
-                            themeProvider.useGlassTheme
-                                ? CupertinoIcons.settings
-                                : Icons.settings,
-                          ),
-                          label: 'Settings',
-                        ),
-                      ],
+              IndexedStack(
+                index: displayIndex,
+                children: List<Widget>.generate(
+                  tabs.length,
+                  (i) => RepaintBoundary(
+                    child: TickerMode(
+                      enabled: i == displayIndex,
+                      child: tabs[i],
                     ),
                   ),
                 ),
               ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: miniPlayerBottom,
+                child: const MiniPlayer(),
+              ),
             ],
+          ),
+          bottomNavigationBar: Padding(
+            padding: EdgeInsets.fromLTRB(
+              12,
+              0,
+              12,
+              navBottomPadding + bottomInset,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                color: Colors.white.withValues(alpha: 0.08),
+                child: BottomNavigationBar(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  currentIndex: displayIndex,
+                  onTap: (i) {
+                    if (i == displayIndex) return;
+                    setState(() => _index = i);
+                  },
+                  items: [
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.search
+                            : Icons.search,
+                      ),
+                      label: 'Search',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.music_albums
+                            : Icons.library_music,
+                        color: isLocalMode ? Colors.white24 : null,
+                      ),
+                      label: 'Library',
+                    ),
+                    BottomNavigationBarItem(
+                      icon: Icon(
+                        themeProvider.useGlassTheme
+                            ? CupertinoIcons.settings
+                            : Icons.settings,
+                      ),
+                      label: 'Settings',
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         );
       },

@@ -10,7 +10,9 @@ import '../../core/widgets/fallback_network_image.dart';
 import 'full_player_sheet.dart';
 
 class MiniPlayer extends StatelessWidget {
-  const MiniPlayer({super.key});
+  final bool embeddedInBottomBar;
+
+  const MiniPlayer({super.key, this.embeddedInBottomBar = false});
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +47,7 @@ class MiniPlayer extends StatelessWidget {
                   player: player,
                   themeProvider: themeProvider,
                   perfMode: perfMode,
+                  embeddedInBottomBar: embeddedInBottomBar,
                 ),
         );
       },
@@ -57,6 +60,7 @@ class _MiniPlayerContent extends StatelessWidget {
   final AudioPlayerService player;
   final ThemeProvider themeProvider;
   final UiPerformanceMode perfMode;
+  final bool embeddedInBottomBar;
 
   const _MiniPlayerContent({
     super.key,
@@ -64,6 +68,7 @@ class _MiniPlayerContent extends StatelessWidget {
     required this.player,
     required this.themeProvider,
     required this.perfMode,
+    required this.embeddedInBottomBar,
   });
 
   @override
@@ -88,7 +93,7 @@ class _MiniPlayerContent extends StatelessWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      padding: EdgeInsets.fromLTRB(12, 0, 12, embeddedInBottomBar ? 0 : 8),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
