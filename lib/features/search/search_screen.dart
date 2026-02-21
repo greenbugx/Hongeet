@@ -32,6 +32,8 @@ class _SearchScreenState extends State<SearchScreen>
     with AutomaticKeepAliveClientMixin<SearchScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _chartsScrollController = ScrollController();
+  final ScrollController _albumsScrollController = ScrollController();
   Future<List<SaavnSong>>? _searchFuture;
   String _lastQuery = '';
   Timer? _debounce;
@@ -858,6 +860,8 @@ class _SearchScreenState extends State<SearchScreen>
 
   @override
   void dispose() {
+    _chartsScrollController.dispose();
+    _albumsScrollController.dispose();
     _scrollController.dispose();
     _controller.dispose();
     _debounce?.cancel();
@@ -1147,6 +1151,8 @@ class _SearchScreenState extends State<SearchScreen>
                   ),
                 )
               : ListView.separated(
+                  key: const PageStorageKey<String>('search_screen_charts_row'),
+                  controller: _chartsScrollController,
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.only(left: 2, right: 2, bottom: 8),
                   cacheExtent: 900,
@@ -1307,6 +1313,10 @@ class _SearchScreenState extends State<SearchScreen>
                     ),
                   )
                 : ListView.separated(
+                    key: const PageStorageKey<String>(
+                      'search_screen_albums_row',
+                    ),
+                    controller: _albumsScrollController,
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.only(
                       left: 2,
