@@ -39,6 +39,24 @@ class YoutubeThumbnailUtils {
         (url.contains('googleusercontent.com') && !url.contains('ytimg.com'));
   }
 
+  static bool isLikelyLowQualityArtwork(String? raw) {
+    final url = _normalizeUrl(raw).toLowerCase();
+    if (url.isEmpty) return true;
+
+    final looksLikeVideoThumb =
+        url.contains('ytimg.com/vi/') || url.contains('ytimg.com/vi_webp/');
+    if (looksLikeVideoThumb) return true;
+
+    if (RegExp(
+      r'w(?:60|88|100|120|180|240)-h(?:60|88|100|120|180|240)',
+    ).hasMatch(url)) {
+      return true;
+    }
+    if (RegExp(r'=s(?:60|88|100|120|180|240)\b').hasMatch(url)) return true;
+
+    return false;
+  }
+
   static double preferredArtworkScale({
     String? songId,
     String? imageUrl,
