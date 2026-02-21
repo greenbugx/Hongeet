@@ -163,14 +163,14 @@ async function loadVersionInfo() {
     if (!res.ok) throw new Error("version.json not found");
     const data = await res.json();
 
-    latestVersion.textContent = data.latest || "v1.3.1+9";
+    latestVersion.textContent = data.latest || "v1.5.0+15";
 
     if (data.apk_url && data.apk_url !== "#") {
       apkLink.href = data.apk_url;
       downloadBtn.href = data.apk_url;
     }
   } catch (_e) {
-    latestVersion.textContent = "v1.3.1+9";
+    latestVersion.textContent = "v1.5.0+15";
   }
 }
 

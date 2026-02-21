@@ -1,6 +1,6 @@
 {
-  "latest": "v1.4.0+14",
-  "min_supported": "v1.3.3+13",
+  "latest": "v1.5.0+15",
+  "min_supported": "v1.4.0+14",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
   "notes": "Offline-first local audio player, independent streaming toggles, manual update checks only, network fully idle when streaming is off, local audio search and playback from home screen."
 }
