@@ -15,8 +15,8 @@
 
   [![GitHub Release](https://img.shields.io/github/v/release/greenbugx/Hongeet?style=for-the-badge&color=white)](https://github.com/greenbugx/Hongeet/releases)
   [![License](https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=black)](LICENSE)<br>
-  [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Sourceforge%20Monthly%20Downloads)](https://sourceforge.net/projects/hongeet/)
-  [![IzzyOnDroid Monthly Downloads](https://img.shields.io/badge/dynamic/json?url=https://dlstats.izzyondroid.org/iod-stats-collector/stats/basic/monthly/rolling.json&query=$.['com.dxku.hongit']&label=IzzyOnDroid%20monthly%20downloads&style=for-the-badge&color=black)](https://apt.izzysoft.de/packages/com.dxku.hongit)
+  [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Downloads(SF))](https://sourceforge.net/projects/hongeet/)
+  <a href="https://github.com/greenbug/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=black&label=DOWNLOADS(GH)" >
 
   <br>
 
