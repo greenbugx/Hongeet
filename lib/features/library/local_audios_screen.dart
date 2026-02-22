@@ -74,6 +74,7 @@ class _LocalAudiosScreenState extends State<LocalAudiosScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() {
       _tracksFuture = _loadWithPermission();
     });
@@ -163,10 +164,9 @@ class _LocalAudiosScreenState extends State<LocalAudiosScreen> {
                               onTap: () {
                                 // Build queue from all local audio tracks, starting at clicked track
                                 player.playLocalFiles(
-                                  files: tracks.map((t) => (
-                                    path: t.path,
-                                    name: t.name,
-                                  )).toList(),
+                                  files: tracks
+                                      .map((t) => (path: t.path, name: t.name))
+                                      .toList(),
                                   startIndex: index,
                                 );
                                 AppMessenger.show('Playing ${track.name}');

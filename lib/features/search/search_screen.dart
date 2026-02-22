@@ -1548,6 +1548,7 @@ class _SearchScreenState extends State<SearchScreen>
                           await AudioPlayerService().playFromList(
                             songs: queuedSongs,
                             startIndex: index,
+                            autoExtendQueue: true,
                           );
                         },
                         child: Padding(
@@ -1952,6 +1953,7 @@ class _SearchScreenState extends State<SearchScreen>
                       await AudioPlayerService().playFromList(
                         songs: queuedSongs,
                         startIndex: i,
+                        autoExtendQueue: true,
                       );
                     },
                   ),
