@@ -16,7 +16,7 @@
   [![GitHub Release](https://img.shields.io/github/v/release/greenbugx/Hongeet?style=for-the-badge&color=white)](https://github.com/greenbugx/Hongeet/releases)
   [![License](https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=black)](LICENSE)<br>
   [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Downloads(SF))](https://sourceforge.net/projects/hongeet/)
-  <a href="https://github.com/greenbug/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=black&label=DOWNLOADS(GH)" >
+  <a href="https://github.com/greenbugx/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=black&label=DOWNLOADS(GH)" >
 
   <br>
 
