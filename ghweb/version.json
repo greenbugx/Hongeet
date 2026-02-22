@@ -1,6 +1,6 @@
 {
-  "latest": "v1.5.0+15",
-  "min_supported": "v1.4.0+14",
+  "latest": "v1.5.1+16",
+  "min_supported": "v1.5.0+15",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
-  "notes": "Added sleep timer modes (15m/30m/60m/end of current song), fixed Samsung-specific UI issues, added charts/albums/trending songs with a trending section, introduced bounded parallel downloads (3 at a time) with queue feedback, and improved search/home scrolling stability and section rendering."
+  "notes": "Queue extension is now more stable with stricter duplicate/noisy-track filtering, dynamic YT continuation no longer falls back to unrelated sources, playlist-create crashes were fixed, and smooth-mode rendering/input performance was tuned for low-end devices."
 }
