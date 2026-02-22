@@ -40,7 +40,7 @@ class _SearchScreenState extends State<SearchScreen>
   static final Map<String, _SessionSearchCacheEntry> _sessionSearchCache = {};
   static const int _maxSessionCacheEntries = 80;
   static const String _quickPicksQuery = 'trending music';
-  static const Duration _quickPicksCacheTtl = Duration(hours: 12);
+  static const Duration _quickPicksCacheTtl = Duration(hours: 1);
   static const String _quickPicksCacheDataPrefix = 'quick_picks_cache_v2_';
   static const String _quickPicksCacheTsPrefix = 'quick_picks_cache_ts_v2_';
   static const int _quickPicksTargetCount = 24;
@@ -287,7 +287,10 @@ class _SearchScreenState extends State<SearchScreen>
 
       if (useYoutube) {
         AppLogger.info('Using YouTube service for search: "$normalizedQuery"');
-        songs = await YoutubeApi.searchSongs(normalizedQuery);
+        songs = await YoutubeApi.searchSongs(
+          normalizedQuery,
+          forceRefresh: forceRefresh,
+        );
       } else if (useSaavn) {
         AppLogger.info('Using Saavn service for search: "$normalizedQuery"');
         songs = await SaavnApi.searchSongs(normalizedQuery);
@@ -349,7 +352,13 @@ class _SearchScreenState extends State<SearchScreen>
     final baseSongs = preFiltered ? songs : _applyGlobalResultFilter(songs);
     if (baseSongs.isEmpty) return const [];
 
-    final dedupedSongs = _dedupeSongsForQuickPicks(baseSongs);
+    final nonVariantSongs = baseSongs
+        .where((song) => !_isLikelyVersionVariantTitle(song.name))
+        .toList(growable: false);
+    final sourceForCuration = nonVariantSongs.isNotEmpty
+        ? nonVariantSongs
+        : baseSongs;
+    final dedupedSongs = _dedupeSongsForQuickPicks(sourceForCuration);
     if (dedupedSongs.isEmpty) return const [];
 
     final scored = dedupedSongs
@@ -419,9 +428,23 @@ class _SearchScreenState extends State<SearchScreen>
       ' ',
     );
     title = title.replaceAll(RegExp(r'\b(feat|ft)\.?\b.*$'), ' ');
+    title = title.replaceAll(
+      RegExp(
+        r'\b(remix|remastered|remaster|live|acoustic|slowed|reverb|sped\s*up|nightcore|instrumental|karaoke|cover|mashup|version|mix|edit|extended|radio)\b',
+      ),
+      ' ',
+    );
     title = title.replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
     title = title.replaceAll(RegExp(r'\s+'), ' ').trim();
     return title;
+  }
+
+  bool _isLikelyVersionVariantTitle(String title) {
+    final text = title.toLowerCase();
+    return RegExp(
+      r'\b(remix|remastered|remaster|live|acoustic|slowed|reverb|sped\s*up|nightcore|instrumental|karaoke|cover|mashup|bootleg|vip|version|mix|edit|extended|radio)\b',
+      caseSensitive: false,
+    ).hasMatch(text);
   }
 
   String _normalizeQuickPickArtist(String raw) {
@@ -705,6 +728,7 @@ class _SearchScreenState extends State<SearchScreen>
         'playlist',
       ];
       if (blocked.any(text.contains)) return false;
+      if (_isLikelyVersionVariantTitle(song.name)) return false;
       final duration = song.duration ?? 0;
       if (duration > 0 && duration > 15 * 60) return false;
       return true;
@@ -814,6 +838,37 @@ class _SearchScreenState extends State<SearchScreen>
       useYoutube: prefs.getBool('use_youtube_service') ?? false,
       useSaavn: prefs.getBool('use_saavn_service') ?? false,
     );
+  }
+
+  List<String> _buildDynamicSeedQueries(
+    List<SaavnSong> songs, {
+    int maxSeeds = 24,
+  }) {
+    if (songs.isEmpty) return const <String>[];
+    final out = <String>[];
+    final seen = <String>{};
+
+    void add(String value) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return;
+      final key = trimmed.toLowerCase();
+      if (!seen.add(key)) return;
+      out.add(trimmed);
+    }
+
+    for (final song in songs.take(12)) {
+      if (_isLikelyVersionVariantTitle(song.name)) continue;
+      final title = _normalizeQuickPickTitle(song.name);
+      final artist = _normalizeQuickPickArtist(song.artists);
+      if (title.isNotEmpty && artist.isNotEmpty) {
+        add('$title $artist');
+      }
+      if (title.isNotEmpty) add(title);
+      if (artist.isNotEmpty) add(artist);
+      if (out.length >= maxSeeds) break;
+    }
+
+    return out.take(maxSeeds).toList(growable: false);
   }
 
   void _onSearchChanged(String query) {
@@ -1503,6 +1558,7 @@ class _SearchScreenState extends State<SearchScreen>
           ),
         )
         .toList(growable: false);
+    final dynamicSeedQueries = _buildDynamicSeedQueries(songs);
 
     return Padding(
       padding: const EdgeInsets.only(top: 24),
@@ -1569,6 +1625,7 @@ class _SearchScreenState extends State<SearchScreen>
                             songs: queuedSongs,
                             startIndex: index,
                             autoExtendQueue: true,
+                            dynamicSeedQueries: dynamicSeedQueries,
                           );
                         },
                         child: Padding(
@@ -1950,6 +2007,9 @@ class _SearchScreenState extends State<SearchScreen>
               ),
             )
             .toList();
+        final dynamicSeedQueries = query.isEmpty
+            ? _buildDynamicSeedQueries(songs)
+            : const <String>[];
 
         return SliverPadding(
           padding: const EdgeInsets.only(bottom: 16),
@@ -1974,6 +2034,7 @@ class _SearchScreenState extends State<SearchScreen>
                         songs: queuedSongs,
                         startIndex: i,
                         autoExtendQueue: true,
+                        dynamicSeedQueries: dynamicSeedQueries,
                       );
                     },
                   ),

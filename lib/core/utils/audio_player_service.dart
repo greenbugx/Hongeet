@@ -66,6 +66,8 @@ class AudioPlayerService {
   bool _autoQueueExtendEnabled = false;
   String? _lastQueueExtendAttemptSongId;
   DateTime? _lastQueueExtendAttemptAt;
+  List<String> _dynamicQueueSeedQueries = const <String>[];
+  int _dynamicQueueSeedCursor = 0;
   final Set<String> _dynamicQueueSeenKeys = <String>{};
   static const int _maxDynamicSeenKeys = 600;
 
@@ -609,6 +611,7 @@ class AudioPlayerService {
     required List<QueuedSong> songs,
     required int startIndex,
     bool autoExtendQueue = false,
+    List<String> dynamicSeedQueries = const <String>[],
   }) async {
     if (songs.isEmpty) {
       AppLogger.warning('Cannot play from empty list');
@@ -628,6 +631,15 @@ class AudioPlayerService {
     _lastQueueExtendAttemptSongId = null;
     _lastQueueExtendAttemptAt = null;
     _queueExtendInFlight = null;
+    _dynamicQueueSeedCursor = 0;
+    _dynamicQueueSeedQueries = List<String>.unmodifiable(
+      dynamicSeedQueries
+          .map((q) => q.trim())
+          .where((q) => q.isNotEmpty)
+          .toSet()
+          .take(40)
+          .toList(growable: false),
+    );
     _dynamicQueueSeenKeys.clear();
     for (final s in songs) {
       _rememberDynamicSeenKey(_songSimilarityKey(s.meta.title, s.meta.artist));
@@ -668,6 +680,8 @@ class AudioPlayerService {
     _lastQueueExtendAttemptSongId = null;
     _lastQueueExtendAttemptAt = null;
     _queueExtendInFlight = null;
+    _dynamicQueueSeedCursor = 0;
+    _dynamicQueueSeedQueries = const <String>[];
     _dynamicQueueSeenKeys.clear();
     _rememberDynamicSeenKey(
       _songSimilarityKey(song.meta.title, song.meta.artist),
@@ -722,6 +736,71 @@ class AudioPlayerService {
       );
       await playNow(queued);
     }
+  }
+
+  Future<void> playFromRecentlyPlayed({
+    required List<Map<String, dynamic>> items,
+    required int startIndex,
+  }) async {
+    if (items.isEmpty) return;
+
+    final safeStart = startIndex.clamp(0, items.length - 1);
+    final tail = items.sublist(safeStart);
+    if (tail.isEmpty) return;
+
+    final queued = <QueuedSong>[];
+    final seedQueries = <String>[];
+    final seenSeedQueries = <String>{};
+
+    void addSeedQuery(String query) {
+      final trimmed = query.trim();
+      if (trimmed.isEmpty) return;
+      final key = trimmed.toLowerCase();
+      if (seenSeedQueries.add(key)) {
+        seedQueries.add(trimmed);
+      }
+    }
+
+    for (final item in tail) {
+      final isLocal = item['isLocal'] == true;
+      final id = (item['id'] ?? '').toString().trim();
+      final title = (item['title'] ?? '').toString().trim();
+      final artist = (item['artist'] ?? '').toString().trim();
+      final imageUrl = (item['imageUrl'] ?? '').toString();
+
+      if (title.isEmpty) continue;
+      if (id.isEmpty) continue;
+
+      queued.add(
+        QueuedSong(
+          id: id,
+          isLocal: isLocal,
+          meta: NowPlaying(
+            title: title,
+            artist: artist.isEmpty ? (isLocal ? 'Offline' : '') : artist,
+            imageUrl: imageUrl,
+          ),
+        ),
+      );
+
+      if (!isLocal) {
+        addSeedQuery('$title $artist');
+        addSeedQuery(title);
+        if (artist.isNotEmpty) {
+          addSeedQuery(artist);
+        }
+      }
+    }
+
+    if (queued.isEmpty) return;
+
+    final autoExtendQueue = !queued.first.isLocal;
+    await playFromList(
+      songs: queued,
+      startIndex: 0,
+      autoExtendQueue: autoExtendQueue,
+      dynamicSeedQueries: seedQueries,
+    );
   }
 
   Future<void> skipNext() {
@@ -831,16 +910,52 @@ class AudioPlayerService {
 
     const appendCount = 1;
     const candidateTake = 5;
-    final query = '${current.meta.title} ${current.meta.artist}'.trim();
-    if (query.isEmpty) return false;
+    const maxQueriesPerExtend = 3;
 
-    List<SaavnSong> candidates = const [];
+    final queries = <String>[];
+    final seenQueries = <String>{};
+    void addQuery(String query) {
+      final trimmed = query.trim();
+      if (trimmed.isEmpty) return;
+      final key = trimmed.toLowerCase();
+      if (seenQueries.add(key)) {
+        queries.add(trimmed);
+      }
+    }
 
-    if (candidates.isEmpty && StreamingPreferences.useYoutube) {
-      try {
-        candidates = await YoutubeApi.searchSongs(query, take: candidateTake);
-      } catch (_) {
-        candidates = const [];
+    addQuery('${current.meta.title} ${current.meta.artist}');
+    addQuery(
+      '${_songTitleCore(current.meta.title, current.meta.artist)} ${current.meta.artist}',
+    );
+    addQuery(current.meta.artist);
+    addQuery(current.meta.title);
+    if (_dynamicQueueSeedQueries.isNotEmpty) {
+      final seed =
+          _dynamicQueueSeedQueries[_dynamicQueueSeedCursor %
+              _dynamicQueueSeedQueries.length];
+      _dynamicQueueSeedCursor = (_dynamicQueueSeedCursor + 1) % 1000000;
+      addQuery(seed);
+    }
+
+    if (queries.isEmpty) return false;
+
+    List<SaavnSong> candidates = <SaavnSong>[];
+    final candidateIds = <String>{};
+
+    if (StreamingPreferences.useYoutube) {
+      for (final query in queries.take(maxQueriesPerExtend)) {
+        List<SaavnSong> batch = const <SaavnSong>[];
+        try {
+          batch = await YoutubeApi.searchSongs(query, take: candidateTake);
+        } catch (_) {
+          batch = const <SaavnSong>[];
+        }
+        for (final song in batch) {
+          if (candidateIds.add(song.id)) {
+            candidates.add(song);
+          }
+        }
+        if (candidates.length >= candidateTake * 2) break;
       }
     }
 
@@ -851,26 +966,39 @@ class AudioPlayerService {
       ..._dynamicQueueSeenKeys,
       ..._queue.map((s) => _songSimilarityKey(s.meta.title, s.meta.artist)),
     };
+    final existingBaseTitleKeys = <String>{
+      ..._queue.map((s) => _songBaseTitleKey(s.meta.title, s.meta.artist)),
+    };
     final recent = _recentlyPlayedSubject.valueOrNull ?? const [];
     for (final item in recent.take(60)) {
       final title = (item['title'] ?? '').toString();
       final artist = (item['artist'] ?? '').toString();
       if (title.trim().isEmpty) continue;
       existingSimilarityKeys.add(_songSimilarityKey(title, artist));
+      existingBaseTitleKeys.add(_songBaseTitleKey(title, artist));
     }
 
     QueuedSong? addition;
     QueuedSong? lowQualityFallback;
     for (final song in candidates) {
+      if (_isLikelyVersionVariant(song.name)) continue;
       if (_isLowSignalCandidate(song.name, song.artists)) continue;
       if (existingIds.contains(song.id)) continue;
       final seedKey = _songSimilarityKey(song.name, song.artists);
       if (existingSimilarityKeys.contains(seedKey)) continue;
+      final seedBaseTitle = _songBaseTitleKey(song.name, song.artists);
+      if (existingBaseTitleKeys.contains(seedBaseTitle)) continue;
 
       final improved = await _improveDynamicQueueArtwork(song);
+      if (_isLikelyVersionVariant(improved.name)) continue;
       if (_isLowSignalCandidate(improved.name, improved.artists)) continue;
       final improvedKey = _songSimilarityKey(improved.name, improved.artists);
       if (existingSimilarityKeys.contains(improvedKey)) continue;
+      final improvedBaseTitle = _songBaseTitleKey(
+        improved.name,
+        improved.artists,
+      );
+      if (existingBaseTitleKeys.contains(improvedBaseTitle)) continue;
       final queued = QueuedSong(
         id: improved.id,
         meta: NowPlaying(
@@ -892,6 +1020,9 @@ class AudioPlayerService {
     _queue = List<QueuedSong>.from(_queue)..add(addition);
     _rememberDynamicSeenKey(
       _songSimilarityKey(addition.meta.title, addition.meta.artist),
+    );
+    existingBaseTitleKeys.add(
+      _songBaseTitleKey(addition.meta.title, addition.meta.artist),
     );
     _notifyQueueChanged();
     AppLogger.info('Added $appendCount song to dynamic queue');
@@ -1057,6 +1188,8 @@ class AudioPlayerService {
     _queueExtendInFlight = null;
     _lastQueueExtendAttemptSongId = null;
     _lastQueueExtendAttemptAt = null;
+    _dynamicQueueSeedCursor = 0;
+    _dynamicQueueSeedQueries = const <String>[];
     _dynamicQueueSeenKeys.clear();
     _skipNextInFlight = null;
     _youtubeRetryCount.clear();
@@ -1130,6 +1263,37 @@ class AudioPlayerService {
     return false;
   }
 
+  bool _isLikelyVersionVariant(String title) {
+    final normalized = _normalizeText(title);
+    if (normalized.isEmpty) return false;
+    const variantTokens = <String>{
+      'remix',
+      'remastered',
+      'remaster',
+      'live',
+      'acoustic',
+      'slowed',
+      'reverb',
+      'sped',
+      'speed',
+      'nightcore',
+      'instrumental',
+      'karaoke',
+      'cover',
+      'mashup',
+      'bootleg',
+      'flip',
+      'vip',
+      'radio',
+      'extended',
+      'edit',
+      'mix',
+      'version',
+    };
+    final tokens = normalized.split(' ').where((t) => t.isNotEmpty);
+    return tokens.any(variantTokens.contains);
+  }
+
   bool _containsBlockedUploadFormatting(String title) {
     final raw = title.trim();
     if (raw.isEmpty) return true;
@@ -1194,6 +1358,25 @@ class AudioPlayerService {
       'version',
       'mix',
       'edit',
+      'remix',
+      'remastered',
+      'remaster',
+      'live',
+      'acoustic',
+      'slowed',
+      'reverb',
+      'sped',
+      'speed',
+      'nightcore',
+      'instrumental',
+      'karaoke',
+      'cover',
+      'mashup',
+      'bootleg',
+      'flip',
+      'vip',
+      'radio',
+      'extended',
       'release',
     };
 
@@ -1258,6 +1441,17 @@ class AudioPlayerService {
     final normalizedTitle = _songTitleCore(title, artist);
     final normalizedArtist = _normalizeArtistCore(artist);
     return '$normalizedTitle|$normalizedArtist';
+  }
+
+  String _songBaseTitleKey(String title, String artist) {
+    final core = _songTitleCore(title, artist);
+    if (core.trim().isEmpty) return '';
+    final tokens = core
+        .split(' ')
+        .where((t) => t.isNotEmpty)
+        .where((t) => t.length > 2)
+        .toList(growable: false);
+    return tokens.join(' ');
   }
 }
 

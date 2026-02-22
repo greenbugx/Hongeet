@@ -32,7 +32,7 @@ class YoutubeApi {
   static const Duration _ytmBootstrapTtl = Duration(hours: 6);
   static const int _maxYtmPages = 3;
   static const int _maxChartArtworkFallbackLookups = 10;
-  static const Duration _trendingAlbumsCacheTtl = Duration(minutes: 10);
+  static const Duration _trendingAlbumsCacheTtl = Duration(minutes: 20);
 
   static final Map<String, _TimedSongsCache> _searchCache = {};
   static final Map<String, _TimedSongsCache> _relatedCache = {};
@@ -49,6 +49,7 @@ class YoutubeApi {
   static Future<List<SaavnSong>> searchSongs(
     String query, {
     int take = 24,
+    bool forceRefresh = false,
   }) async {
     final normalized = query.trim();
     if (normalized.isEmpty) return const [];
@@ -58,9 +59,11 @@ class YoutubeApi {
     final artistQuery = _isLikelyArtistQuery(normalized);
     final effectiveQuery = _buildMusicSearchQuery(normalized);
 
-    final cached = _searchCache[cacheKey];
-    if (cached != null && !cached.isExpired(const Duration(minutes: 2))) {
-      return cached.songs;
+    if (!forceRefresh) {
+      final cached = _searchCache[cacheKey];
+      if (cached != null && !cached.isExpired(const Duration(minutes: 2))) {
+        return cached.songs;
+      }
     }
 
     List<SaavnSong> ytmSongs = const [];
@@ -220,7 +223,7 @@ class YoutubeApi {
       throw StateError('YTM search failed with HTTP ${response.statusCode}');
     }
 
-    final decoded = jsonDecode(response.body);
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is! Map<String, dynamic>) {
       throw StateError('YTM search returned invalid payload');
     }
@@ -280,7 +283,7 @@ class YoutubeApi {
       throw StateError('YTM browse failed with HTTP ${response.statusCode}');
     }
 
-    final decoded = jsonDecode(response.body);
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
     if (decoded is! Map<String, dynamic>) {
       throw StateError('YTM browse returned invalid payload');
     }
@@ -500,8 +503,10 @@ class YoutubeApi {
     final secondColumn = _asMap(
       _asMap(columns[1])?['musicResponsiveListItemFlexColumnRenderer'],
     );
-    final runs = _asList(_asMap(secondColumn?['text'])?['runs']);
-    if (runs.isEmpty) return 'Unknown';
+    final textContainer = _asMap(secondColumn?['text']);
+    final runs = _asList(textContainer?['runs']);
+    final rawLine = _textFromRuns(textContainer).trim();
+    if (runs.isEmpty && rawLine.isEmpty) return 'Unknown';
 
     final artists = <String>{};
     for (final run in runs) {
@@ -533,13 +538,73 @@ class YoutubeApi {
 
     if (artists.isNotEmpty) return artists.join(', ');
 
+    final fallbackFromRuns = <String>{};
     for (final run in runs) {
       final text = (_asMap(run)?['text'] ?? '').toString().trim();
-      if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) continue;
+      if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) {
+        continue;
+      }
+      if (_isLikelyNonArtistMetaText(text)) continue;
+      fallbackFromRuns.add(text);
+    }
+    if (fallbackFromRuns.isNotEmpty) return fallbackFromRuns.join(', ');
+
+    if (rawLine.isNotEmpty) {
+      final pieces = rawLine
+          .split(RegExp(r'\s*[•\u2022\|]\s*'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .where((s) => !_looksLikeDurationText(s))
+          .where((s) => !_isLikelyNonArtistMetaText(s))
+          .toList(growable: false);
+      if (pieces.isNotEmpty) return pieces.join(', ');
+    }
+
+    for (final run in runs) {
+      final text = (_asMap(run)?['text'] ?? '').toString().trim();
+      if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) {
+        continue;
+      }
       return text;
     }
 
+    if (rawLine.isNotEmpty && !_isLikelyNonArtistMetaText(rawLine)) {
+      return rawLine;
+    }
+
     return 'Unknown';
+  }
+
+  static bool _isLikelyNonArtistMetaText(String text) {
+    final normalized = text.toLowerCase().trim();
+    if (normalized.isEmpty) return true;
+    if (RegExp(r'^\d{4}$').hasMatch(normalized)) return true;
+    if (RegExp(r'^\d+\s*(songs?|tracks?)$').hasMatch(normalized)) return true;
+    if (RegExp(r'^\d+(\.\d+)?[mk]?\s*views$').hasMatch(normalized)) {
+      return true;
+    }
+
+    const blocked = <String>{
+      'single',
+      'album',
+      'ep',
+      'song',
+      'songs',
+      'track',
+      'tracks',
+      'music',
+      'unknown',
+      'official',
+      'official audio',
+      'official video',
+      'video',
+      'audio',
+      'lyrics',
+      'lyric',
+      'new release',
+      'new releases',
+    };
+    return blocked.contains(normalized);
   }
 
   static int? _extractYtmDurationSeconds(Map<String, dynamic> renderer) {
@@ -1434,11 +1499,11 @@ class YoutubeApi {
         )
         .timeout(_ytmBootstrapTimeout);
 
-    if (response.statusCode != 200 || response.body.isEmpty) {
+    if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
       return _YtmBootstrapCache.fallback();
     }
 
-    final html = response.body;
+    final html = utf8.decode(response.bodyBytes);
     final apiKey =
         _firstRegexGroup(html, RegExp(r'"INNERTUBE_API_KEY":"([^"]+)"')) ??
         _fallbackYtmApiKey;
