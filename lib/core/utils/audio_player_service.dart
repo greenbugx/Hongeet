@@ -743,8 +743,6 @@ class AudioPlayerService {
     var nextIndex = _currentIndex + 1;
     final remainingBeforeSkip = _queue.length - _currentIndex - 1;
 
-    // Keep "Up Next" topped-up: when visible queue drops below target,
-    // fetch one more in background.
     if (_autoQueueExtendEnabled && remainingBeforeSkip <= _upNextTargetCount) {
       unawaited(_maybeExtendDynamicQueue());
     }
@@ -801,7 +799,7 @@ class AudioPlayerService {
     if (!StreamingPreferences.useYoutube) return false;
 
     final remaining = _queue.length - _currentIndex - 1;
-    // One-by-one top-up mode: keep at least [_upNextTargetCount] tracks ahead.
+
     if (!forceAtEnd && remaining >= _upNextTargetCount) return false;
 
     final now = DateTime.now();
@@ -838,7 +836,6 @@ class AudioPlayerService {
 
     List<SaavnSong> candidates = const [];
 
-    // Prefer YT Music song-search first (cleaner than raw related videos).
     if (candidates.isEmpty && StreamingPreferences.useYoutube) {
       try {
         candidates = await YoutubeApi.searchSongs(query, take: candidateTake);
@@ -1137,10 +1134,8 @@ class AudioPlayerService {
     final raw = title.trim();
     if (raw.isEmpty) return true;
 
-    // Block noisy " | ... | ... | " style uploads.
     if (raw.contains('|')) return true;
 
-    // Heavy separator spam tends to be unofficial/reupload metadata.
     final dashSepCount = RegExp(
       r'\s(?:-|\u2013|\u2014)\s',
     ).allMatches(raw).length;

@@ -56,7 +56,6 @@ class BackgroundAudioHandler extends BaseAudioHandler
 
   void _listenDuration() {
     _durationSub = _service.durationStream.listen((dur) {
-      // Cache the latest duration
       _latestDuration = dur;
 
       final item = mediaItem.value;
