@@ -389,7 +389,10 @@ class FullPlayerSheet extends StatelessWidget {
     final theme = Provider.of<ThemeProvider>(context);
     final perfMode = theme.resolvedUiPerformanceMode(context);
     final fullVisuals = perfMode == UiPerformanceMode.full;
+    final smoothVisuals = perfMode == UiPerformanceMode.smooth;
     final backdropBlur = fullVisuals ? 30.0 : 16.0;
+    final mainArtCacheSize = smoothVisuals ? 512 : 768;
+    final queueArtCacheSize = smoothVisuals ? 192 : 256;
 
     return StreamBuilder<NowPlaying?>(
       stream: player.nowPlayingStream,
@@ -440,15 +443,18 @@ class FullPlayerSheet extends StatelessWidget {
 
                 return Stack(
                   children: [
-                    BackdropFilter(
-                      filter: ImageFilter.blur(
-                        sigmaX: backdropBlur,
-                        sigmaY: backdropBlur,
+                    if (smoothVisuals)
+                      Container(color: Colors.black.withValues(alpha: 0.72))
+                    else
+                      BackdropFilter(
+                        filter: ImageFilter.blur(
+                          sigmaX: backdropBlur,
+                          sigmaY: backdropBlur,
+                        ),
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.65),
+                        ),
                       ),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.65),
-                      ),
-                    ),
 
                     DraggableScrollableSheet(
                       initialChildSize: 1,
@@ -496,8 +502,8 @@ class FullPlayerSheet extends StatelessWidget {
                                               urls: currentArtCandidates,
                                               fit: BoxFit.cover,
                                               alignment: Alignment.center,
-                                              cacheWidth: 768,
-                                              cacheHeight: 768,
+                                              cacheWidth: mainArtCacheSize,
+                                              cacheHeight: mainArtCacheSize,
                                               filterQuality:
                                                   FilterQuality.medium,
                                               fallback: Container(
@@ -1015,8 +1021,8 @@ class FullPlayerSheet extends StatelessWidget {
                                                   ),
                                               width: 48,
                                               height: 48,
-                                              cacheWidth: 256,
-                                              cacheHeight: 256,
+                                              cacheWidth: queueArtCacheSize,
+                                              cacheHeight: queueArtCacheSize,
                                               fit: BoxFit.cover,
                                               alignment: Alignment.center,
                                               filterQuality:

@@ -799,14 +799,32 @@ class _SearchScreenState extends State<SearchScreen>
     );
   }
 
+  Future<({bool useYoutube, bool useSaavn})> _resolveInputServices() async {
+    final perfMode = Provider.of<ThemeProvider>(
+      context,
+      listen: false,
+    ).resolvedUiPerformanceMode(context);
+    final smoothMode = perfMode == UiPerformanceMode.smooth;
+    if (smoothMode) {
+      return (useYoutube: _useYoutubeService, useSaavn: _useSaavnService);
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    return (
+      useYoutube: prefs.getBool('use_youtube_service') ?? false,
+      useSaavn: prefs.getBool('use_saavn_service') ?? false,
+    );
+  }
+
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
     final trimmed = query.trim();
 
     if (trimmed.isEmpty) {
-      SharedPreferences.getInstance().then((prefs) {
-        final useYoutube = prefs.getBool('use_youtube_service') ?? false;
-        final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+      _resolveInputServices().then((services) {
+        if (!mounted) return;
+        final useYoutube = services.useYoutube;
+        final useSaavn = services.useSaavn;
         setState(() {
           _servicesReady = true;
           _useYoutubeService = useYoutube;
@@ -840,9 +858,10 @@ class _SearchScreenState extends State<SearchScreen>
     _debounce = Timer(const Duration(milliseconds: 400), () {
       if (trimmed == _lastQuery) return;
 
-      SharedPreferences.getInstance().then((prefs) {
-        final useYoutube = prefs.getBool('use_youtube_service') ?? false;
-        final useSaavn = prefs.getBool('use_saavn_service') ?? false;
+      _resolveInputServices().then((services) {
+        if (!mounted) return;
+        final useYoutube = services.useYoutube;
+        final useSaavn = services.useSaavn;
         setState(() {
           _servicesReady = true;
           _useYoutubeService = useYoutube;
@@ -876,6 +895,7 @@ class _SearchScreenState extends State<SearchScreen>
     super.build(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
+    final smoothMode = perfMode == UiPerformanceMode.smooth;
     final animateSectionHeader = perfMode == UiPerformanceMode.full;
 
     if (!_servicesReady) {
@@ -894,7 +914,7 @@ class _SearchScreenState extends State<SearchScreen>
           key: const PageStorageKey<String>('search_screen_list'),
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
-          cacheExtent: 720,
+          cacheExtent: smoothMode ? 420 : 720,
           slivers: [
             const SliverToBoxAdapter(
               child: Text(
