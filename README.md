@@ -20,12 +20,11 @@
 
   <br>
 
-  [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)  
-
+  [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)
 
   <br>
 
-  [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)
+  <a href="https://sourceforge.net/projects/hongeet/" target="_blank"><img src="https://b.sf-syn.com/badge_img/3954764/oss-rising-star-white" alt="OSS Rising Star" width="130" /></a>
      
   <br>
 
