@@ -18,6 +18,12 @@
   [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Downloads(SF))](https://sourceforge.net/projects/hongeet/)
   <a href="https://github.com/greenbugx/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=black&label=DOWNLOADS(GH)" >
 
+  [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)
+
+  <br>
+
+  <a href="https://sourceforge.net/projects/hongeet/" target="_blank"><img src="https://b.sf-syn.com/badge_img/3954764/oss-rising-star-white" alt="OSS Rising Star" width="130" /></a>
+     
   <br>
 
   <a href="https://sourceforge.net/projects/hongeet/files/latest/download">
