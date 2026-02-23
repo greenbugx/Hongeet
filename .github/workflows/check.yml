@@ -9,6 +9,7 @@ on:
       - 'CODE_OF_CONDUCT.md'
       - 'CHANGELOG.md'
       - 'UPCOMING_FEATURE_UPDATES.md'
+      - 'SECURITY.md'
       - 'fastlane/**'
       - '.github/workflows/pages-ghweb.yml'
       - 'ghweb/**'
