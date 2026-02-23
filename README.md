@@ -25,6 +25,10 @@
 
   <br>
 
+  [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)
+     
+  <br>
+
   <a href="https://sourceforge.net/projects/hongeet/files/latest/download">
       <img alt="Download Hongeet" src="https://a.fsdn.com/con/app/sf-download-button" width="300" srcset="https://a.fsdn.com/con/app/sf-download-button?button_size=2x 2x">
   </a>
