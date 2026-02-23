@@ -18,8 +18,6 @@
   [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Downloads(SF))](https://sourceforge.net/projects/hongeet/)
   <a href="https://github.com/greenbugx/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=black&label=DOWNLOADS(GH)" >
 
-  <br>
-
   [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)
 
   <br>
