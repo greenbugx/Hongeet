@@ -159,7 +159,7 @@ class AudioPlayerService {
 
       if (isYoutube) {
         final prefs = await SharedPreferences.getInstance();
-        final useYoutube = prefs.getBool('use_youtube_service') ?? true;
+        final useYoutube = prefs.getBool('use_youtube_service') ?? false;
         if (!useYoutube) {
           throw StateError('YouTube streaming disabled by user');
         }
@@ -1144,7 +1144,6 @@ class AudioPlayerService {
 
     _queue = List.unmodifiable(newQueue);
     _prefetchedForIndex = null;
-    _notifyQueueChanged();
 
     int newIndex = _currentIndex;
     if (wasCurrentSong) {
@@ -1154,6 +1153,7 @@ class AudioPlayerService {
       ++_playToken;
       await _player.stop();
       _trackLoading.add(false);
+      _notifyQueueChanged();
 
       if (newIndex >= 0 && newIndex < newQueue.length) {
         _currentIndex = newIndex;

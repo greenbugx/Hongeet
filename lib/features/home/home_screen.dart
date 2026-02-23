@@ -19,7 +19,26 @@ class _HomeScreenState extends State<HomeScreen> {
   int _index = 0;
   int _searchScreenVersion = 0;
 
+  bool _useYoutube = false;
+  bool _useSaavn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStreamingPrefs();
+  }
+
+  Future<void> _loadStreamingPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _useYoutube = prefs.getBool('use_youtube_service') ?? false;
+      _useSaavn = prefs.getBool('use_saavn_service') ?? false;
+    });
+  }
+
   void _onMusicServiceChanged(bool _) {
+    _loadStreamingPrefs();
     setState(() {
       _searchScreenVersion++;
     });
@@ -45,105 +64,83 @@ class _HomeScreenState extends State<HomeScreen> {
         kBottomNavigationBarHeight +
         miniGapAboveNav;
 
-    return FutureBuilder<Map<String, bool>>(
-      future: SharedPreferences.getInstance().then(
-        (prefs) => {
-          'use_youtube_service': prefs.getBool('use_youtube_service') ?? false,
-          'use_saavn_service': prefs.getBool('use_saavn_service') ?? false,
-        },
+    final isLocalMode = !_useYoutube && !_useSaavn;
+
+    final tabs = <Widget>[
+      SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
+      isLocalMode ? const _DisabledLibraryPlaceholder() : const LibraryScreen(),
+      SettingsScreen(onMusicServiceChanged: _onMusicServiceChanged),
+    ];
+
+    int displayIndex = _index;
+    if (displayIndex >= tabs.length) displayIndex = 0;
+
+    return Scaffold(
+      extendBody: true,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: displayIndex,
+            children: List<Widget>.generate(
+              tabs.length,
+              (i) => RepaintBoundary(
+                child: TickerMode(enabled: i == displayIndex, child: tabs[i]),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: miniPlayerBottom,
+            child: const MiniPlayer(),
+          ),
+        ],
       ),
-      builder: (context, snapshot) {
-        final useYoutube = snapshot.data?['use_youtube_service'] ?? false;
-        final useSaavn = snapshot.data?['use_saavn_service'] ?? false;
-        final isLocalMode = !useYoutube && !useSaavn;
-
-        final tabs = <Widget>[
-          SearchScreen(key: ValueKey('search_$_searchScreenVersion')),
-          isLocalMode
-              ? const _DisabledLibraryPlaceholder()
-              : const LibraryScreen(),
-          SettingsScreen(onMusicServiceChanged: _onMusicServiceChanged),
-        ];
-
-        int displayIndex = _index;
-        if (displayIndex >= tabs.length) displayIndex = 0;
-
-        return Scaffold(
-          extendBody: true,
-          body: Stack(
-            children: [
-              IndexedStack(
-                index: displayIndex,
-                children: List<Widget>.generate(
-                  tabs.length,
-                  (i) => RepaintBoundary(
-                    child: TickerMode(
-                      enabled: i == displayIndex,
-                      child: tabs[i],
-                    ),
+      bottomNavigationBar: Padding(
+        padding: EdgeInsets.fromLTRB(12, 0, 12, navBottomPadding + bottomInset),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            color: Colors.white.withValues(alpha: 0.08),
+            child: BottomNavigationBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              currentIndex: displayIndex,
+              onTap: (i) {
+                if (i == displayIndex) return;
+                setState(() => _index = i);
+              },
+              items: [
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    themeProvider.useGlassTheme
+                        ? CupertinoIcons.search
+                        : Icons.search,
                   ),
+                  label: 'Search',
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: miniPlayerBottom,
-                child: const MiniPlayer(),
-              ),
-            ],
-          ),
-          bottomNavigationBar: Padding(
-            padding: EdgeInsets.fromLTRB(
-              12,
-              0,
-              12,
-              navBottomPadding + bottomInset,
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Container(
-                color: Colors.white.withValues(alpha: 0.08),
-                child: BottomNavigationBar(
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  currentIndex: displayIndex,
-                  onTap: (i) {
-                    if (i == displayIndex) return;
-                    setState(() => _index = i);
-                  },
-                  items: [
-                    BottomNavigationBarItem(
-                      icon: Icon(
-                        themeProvider.useGlassTheme
-                            ? CupertinoIcons.search
-                            : Icons.search,
-                      ),
-                      label: 'Search',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(
-                        themeProvider.useGlassTheme
-                            ? CupertinoIcons.music_albums
-                            : Icons.library_music,
-                        color: isLocalMode ? Colors.white24 : null,
-                      ),
-                      label: 'Library',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(
-                        themeProvider.useGlassTheme
-                            ? CupertinoIcons.settings
-                            : Icons.settings,
-                      ),
-                      label: 'Settings',
-                    ),
-                  ],
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    themeProvider.useGlassTheme
+                        ? CupertinoIcons.music_albums
+                        : Icons.library_music,
+                    color: isLocalMode ? Colors.white24 : null,
+                  ),
+                  label: 'Library',
                 ),
-              ),
+                BottomNavigationBarItem(
+                  icon: Icon(
+                    themeProvider.useGlassTheme
+                        ? CupertinoIcons.settings
+                        : Icons.settings,
+                  ),
+                  label: 'Settings',
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

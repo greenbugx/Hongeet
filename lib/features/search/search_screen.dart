@@ -174,6 +174,9 @@ class _SearchScreenState extends State<SearchScreen>
     final useYoutube = prefs.getBool('use_youtube_service') ?? false;
     final useSaavn = prefs.getBool('use_saavn_service') ?? false;
     final query = _controller.text.trim();
+
+    Future<List<LocalAudioTrack>>? localAudiosFuture;
+
     setState(() {
       _servicesReady = true;
       _useYoutubeService = useYoutube;
@@ -184,10 +187,7 @@ class _SearchScreenState extends State<SearchScreen>
           _homeSectionsFuture = null;
           _searchFuture = null;
           _localAudiosFuture = _loadLocalAudiosWithPermission();
-          _localAudiosFuture.then((tracks) {
-            if (!mounted) return;
-            setState(() => _localAudios = tracks);
-          });
+          localAudiosFuture = _localAudiosFuture;
         } else {
           _searchFuture = _performSearch(_quickPicksQuery, forceRefresh: true);
           _homeSectionsFuture = useYoutube
@@ -198,15 +198,18 @@ class _SearchScreenState extends State<SearchScreen>
         _searchFuture = null;
       } else {
         _lastQuery = query;
-        if (!useYoutube && !useSaavn) {
-          setState(() {
-            _searchFuture = _searchLocalAudios(query);
-          });
-        } else {
-          _searchFuture = _performSearch(query, forceRefresh: true);
-        }
+        _searchFuture = (!useYoutube && !useSaavn)
+            ? _searchLocalAudios(query)
+            : _performSearch(query, forceRefresh: true);
       }
     });
+
+    if (localAudiosFuture != null) {
+      final tracks = await localAudiosFuture!;
+      if (!mounted) return;
+      setState(() => _localAudios = tracks);
+    }
+
     if (useYoutube || useSaavn) {
       await _searchFuture?.catchError((_) => <SaavnSong>[]);
     }
