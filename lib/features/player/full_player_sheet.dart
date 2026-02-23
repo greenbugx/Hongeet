@@ -389,7 +389,10 @@ class FullPlayerSheet extends StatelessWidget {
     final theme = Provider.of<ThemeProvider>(context);
     final perfMode = theme.resolvedUiPerformanceMode(context);
     final fullVisuals = perfMode == UiPerformanceMode.full;
+    final smoothVisuals = perfMode == UiPerformanceMode.smooth;
     final backdropBlur = fullVisuals ? 30.0 : 16.0;
+    final mainArtCacheSize = smoothVisuals ? 512 : 768;
+    final queueArtCacheSize = smoothVisuals ? 192 : 256;
 
     return StreamBuilder<NowPlaying?>(
       stream: player.nowPlayingStream,
@@ -440,15 +443,18 @@ class FullPlayerSheet extends StatelessWidget {
 
                 return Stack(
                   children: [
-                    BackdropFilter(
-                      filter: ImageFilter.blur(
-                        sigmaX: backdropBlur,
-                        sigmaY: backdropBlur,
+                    if (smoothVisuals)
+                      Container(color: Colors.black.withValues(alpha: 0.72))
+                    else
+                      BackdropFilter(
+                        filter: ImageFilter.blur(
+                          sigmaX: backdropBlur,
+                          sigmaY: backdropBlur,
+                        ),
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.65),
+                        ),
                       ),
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.65),
-                      ),
-                    ),
 
                     DraggableScrollableSheet(
                       initialChildSize: 1,
@@ -496,8 +502,8 @@ class FullPlayerSheet extends StatelessWidget {
                                               urls: currentArtCandidates,
                                               fit: BoxFit.cover,
                                               alignment: Alignment.center,
-                                              cacheWidth: 768,
-                                              cacheHeight: 768,
+                                              cacheWidth: mainArtCacheSize,
+                                              cacheHeight: mainArtCacheSize,
                                               filterQuality:
                                                   FilterQuality.medium,
                                               fallback: Container(
@@ -835,55 +841,55 @@ class FullPlayerSheet extends StatelessWidget {
                                                 ),
                                             ],
                                           ),
-                                          if (hasRemoteTrack) ...[
+                                          if (currentSong != null) ...[
                                             const SizedBox(height: 8),
 
                                             Row(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: [
-                                                StreamBuilder<
-                                                  Map<
-                                                    String,
-                                                    List<Map<String, dynamic>>
-                                                  >
-                                                >(
-                                                  stream:
-                                                      PlaylistManager.stream,
-                                                  builder: (_, snap) {
-                                                    final playlists =
-                                                        snap.data ?? {};
-                                                    final favs =
-                                                        playlists[PlaylistManager
-                                                            .systemFavourites] ??
-                                                        [];
-                                                    final isFav = favs.any(
-                                                      (s) =>
-                                                          s['id'] ==
-                                                          currentSong.id,
-                                                    );
+                                                if (hasRemoteTrack) ...[
+                                                  StreamBuilder<
+                                                    Map<
+                                                      String,
+                                                      List<Map<String, dynamic>>
+                                                    >
+                                                  >(
+                                                    stream:
+                                                        PlaylistManager.stream,
+                                                    builder: (_, snap) {
+                                                      final playlists =
+                                                          snap.data ?? {};
+                                                      final favs =
+                                                          playlists[PlaylistManager
+                                                              .systemFavourites] ??
+                                                          [];
+                                                      final isFav = favs.any(
+                                                        (s) =>
+                                                            s['id'] ==
+                                                            currentSong.id,
+                                                      );
 
-                                                    return IconButton(
-                                                      icon: Icon(
-                                                        theme.useGlassTheme
-                                                            ? (isFav
-                                                                  ? CupertinoIcons
-                                                                        .heart_fill
-                                                                  : CupertinoIcons
-                                                                        .heart)
-                                                            : (isFav
-                                                                  ? Icons
-                                                                        .favorite
-                                                                  : Icons
-                                                                        .favorite_border),
-                                                        color: isFav
-                                                            ? Colors.redAccent
-                                                            : Colors.white70,
-                                                      ),
-                                                      iconSize: 26,
-                                                      onPressed: () async =>
-                                                          await PlaylistManager.toggleFavourite(
-                                                            {
+                                                      return IconButton(
+                                                        icon: Icon(
+                                                          theme.useGlassTheme
+                                                              ? (isFav
+                                                                    ? CupertinoIcons
+                                                                          .heart_fill
+                                                                    : CupertinoIcons
+                                                                          .heart)
+                                                              : (isFav
+                                                                    ? Icons
+                                                                          .favorite
+                                                                    : Icons
+                                                                          .favorite_border),
+                                                          color: isFav
+                                                              ? Colors.redAccent
+                                                              : Colors.white70,
+                                                        ),
+                                                        iconSize: 26,
+                                                        onPressed: () async =>
+                                                            await PlaylistManager.toggleFavourite({
                                                               'id': currentSong
                                                                   .id,
                                                               'title':
@@ -898,12 +904,12 @@ class FullPlayerSheet extends StatelessWidget {
                                                                   currentSong
                                                                       .meta
                                                                       .imageUrl,
-                                                            },
-                                                          ),
-                                                    );
-                                                  },
-                                                ),
-                                                const SizedBox(width: 12),
+                                                            }),
+                                                      );
+                                                    },
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                ],
                                                 StreamBuilder<SleepTimerStatus>(
                                                   stream:
                                                       player.sleepTimerStream,
@@ -941,23 +947,25 @@ class FullPlayerSheet extends StatelessWidget {
                                                     );
                                                   },
                                                 ),
-                                                const SizedBox(width: 12),
-                                                IconButton(
-                                                  icon: Icon(
-                                                    theme.useGlassTheme
-                                                        ? CupertinoIcons
-                                                              .music_note_list
-                                                        : Icons.playlist_add,
-                                                    color: Colors.white70,
+                                                if (hasRemoteTrack) ...[
+                                                  const SizedBox(width: 12),
+                                                  IconButton(
+                                                    icon: Icon(
+                                                      theme.useGlassTheme
+                                                          ? CupertinoIcons
+                                                                .music_note_list
+                                                          : Icons.playlist_add,
+                                                      color: Colors.white70,
+                                                    ),
+                                                    iconSize: 26,
+                                                    onPressed: () {
+                                                      _showAddToPlaylistSheet(
+                                                        context,
+                                                        currentSong,
+                                                      );
+                                                    },
                                                   ),
-                                                  iconSize: 26,
-                                                  onPressed: () {
-                                                    _showAddToPlaylistSheet(
-                                                      context,
-                                                      currentSong,
-                                                    );
-                                                  },
-                                                ),
+                                                ],
                                               ],
                                             ),
                                           ],
@@ -1013,8 +1021,8 @@ class FullPlayerSheet extends StatelessWidget {
                                                   ),
                                               width: 48,
                                               height: 48,
-                                              cacheWidth: 256,
-                                              cacheHeight: 256,
+                                              cacheWidth: queueArtCacheSize,
+                                              cacheHeight: queueArtCacheSize,
                                               fit: BoxFit.cover,
                                               alignment: Alignment.center,
                                               filterQuality:
@@ -1218,7 +1226,6 @@ class _QueuedDownloadTask {
 
 void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
   final stableContext = context;
-  final rootNavigator = Navigator.of(stableContext, rootNavigator: true);
   final useGlassTheme = Provider.of<ThemeProvider>(
     context,
     listen: false,
@@ -1357,8 +1364,8 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                         onPressed: () {
                           Navigator.of(context).pop();
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (!rootNavigator.mounted) return;
-                            _showCreatePlaylistDialog(rootNavigator.context);
+                            if (!stableContext.mounted) return;
+                            _showCreatePlaylistDialog(stableContext);
                           });
                         },
                         child: const Text('+ Create new playlist'),
@@ -1376,7 +1383,7 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
 }
 
 void _showCreatePlaylistDialog(BuildContext context) {
-  final controller = TextEditingController();
+  String playlistName = '';
 
   showDialog<void>(
     context: context,
@@ -1384,8 +1391,9 @@ void _showCreatePlaylistDialog(BuildContext context) {
       scrollable: true,
       title: const Text('New Playlist'),
       content: TextField(
-        controller: controller,
+        autofocus: true,
         decoration: const InputDecoration(hintText: 'Playlist name'),
+        onChanged: (value) => playlistName = value,
       ),
       actions: [
         TextButton(
@@ -1397,7 +1405,7 @@ void _showCreatePlaylistDialog(BuildContext context) {
         ),
         TextButton(
           onPressed: () async {
-            final name = controller.text.trim();
+            final name = playlistName.trim();
             if (name.isEmpty) return;
 
             FocusScope.of(dialogContext).unfocus();

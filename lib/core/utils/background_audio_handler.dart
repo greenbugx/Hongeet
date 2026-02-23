@@ -13,6 +13,7 @@ class BackgroundAudioHandler extends BaseAudioHandler
   StreamSubscription? _positionSub;
   StreamSubscription? _stateSub;
   StreamSubscription? _durationSub;
+  StreamSubscription? _nowPlayingSub;
   String _activeArtSeed = '';
 
   Duration? _latestDuration;
@@ -55,7 +56,6 @@ class BackgroundAudioHandler extends BaseAudioHandler
 
   void _listenDuration() {
     _durationSub = _service.durationStream.listen((dur) {
-      // Cache the latest duration
       _latestDuration = dur;
 
       final item = mediaItem.value;
@@ -66,7 +66,7 @@ class BackgroundAudioHandler extends BaseAudioHandler
   }
 
   void _listenNowPlaying() {
-    _service.nowPlayingStream.listen((now) {
+    _nowPlayingSub = _service.nowPlayingStream.listen((now) {
       if (now == null) return;
       final artSeed = '${now.title}|${now.artist}|${now.imageUrl}';
       _activeArtSeed = artSeed;
@@ -181,5 +181,6 @@ class BackgroundAudioHandler extends BaseAudioHandler
     await _positionSub?.cancel();
     await _stateSub?.cancel();
     await _durationSub?.cancel();
+    await _nowPlayingSub?.cancel();
   }
 }

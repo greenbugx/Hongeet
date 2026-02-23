@@ -415,7 +415,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          onTap: () => player.playFromCache(song),
+                          onTap: () => player.playFromRecentlyPlayed(
+                            items: items,
+                            startIndex: index,
+                          ),
                         ),
                       ),
                     ),

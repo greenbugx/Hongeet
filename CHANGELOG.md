@@ -1,3 +1,21 @@
+# v1.5.1+16
+
+## Queue Stability + Smooth Mode Performance Tuning
+
+### BUG FIXES / IMPROVEMENTS
+
+- **Dynamic Queue:** Reworked queue auto-extend behavior to keep "Up Next" filled more consistently during continuous playback
+- **Duplicate Control:** Tightened duplicate/noisy title filtering for auto-fetched songs (better handling of low-signal uploads and title variants)
+- **Memory Safety:** Added/strengthened stream subscription cleanup in player/background flow to avoid listener buildup
+- **Playlist Dialog Stability:** Fixed controller/dispose race issues that could throw errors when creating playlists
+- **Smooth Mode Perf:** Added smooth-mode-only optimizations for full player and search input path (reduced heavy rendering work and lighter image decode pressure)
+
+### UPCOMING (work in progress)
+
+- Better relevance tuning for search and recommendations
+- Discord Rich Presence
+- Lyrics support(targeted for v1.6+)
+
 # v1.5.0+15
 
 ## Sleep Timer + Search/Home Feed Upgrade

@@ -41,6 +41,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
   }
 
   Future<void> _refresh() async {
+    if (!mounted) return;
     setState(() {
       _songsFuture = DownloadedSongsProvider.load();
     });
@@ -202,10 +203,9 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
                               onTap: () {
                                 // Build queue from all downloaded songs, starting at clicked song
                                 player.playLocalFiles(
-                                  files: songs.map((s) => (
-                                    path: s.path,
-                                    name: s.name,
-                                  )).toList(),
+                                  files: songs
+                                      .map((s) => (path: s.path, name: s.name))
+                                      .toList(),
                                   startIndex: index,
                                 );
                                 AppMessenger.show('Playing ${song.name}');

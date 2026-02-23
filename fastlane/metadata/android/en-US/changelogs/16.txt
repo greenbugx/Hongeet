@@ -1,0 +1,4 @@
+Improved dynamic queue stability so Up Next stays filled more reliably during playback. 
+Tightened duplicate/noisy song filtering for auto-fetched tracks and removed unrelated fallback sources from YouTube continuation flow. 
+Fixed playlist creation dialog crashes caused by controller lifecycle issues. 
+Added smooth-mode performance tuning for full player/search to reduce jank on low-end devices.

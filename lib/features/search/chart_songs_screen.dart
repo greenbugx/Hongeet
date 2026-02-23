@@ -37,6 +37,93 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
   int _enhancedCount = 0;
   int _enhanceTargetCount = 0;
 
+  bool _isUnknownArtistValue(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    const blocked = <String>{
+      'unknown',
+      'unknown artist',
+      'artist',
+      'single',
+      'album',
+      'ep',
+      'song',
+      'songs',
+      'track',
+      'tracks',
+    };
+    if (blocked.contains(normalized)) return true;
+    if (RegExp(r'^\d{1,2}:\d{2}(?::\d{2})?$').hasMatch(normalized)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _isLikelyMetaSubtitlePart(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    const blocked = <String>{
+      'single',
+      'album',
+      'ep',
+      'song',
+      'songs',
+      'track',
+      'tracks',
+      'chart',
+      'charts',
+      'youtube music',
+      'new release',
+      'new releases',
+      'unknown',
+    };
+    if (blocked.contains(normalized)) return true;
+    if (RegExp(r'^\d{4}$').hasMatch(normalized)) return true;
+    if (RegExp(r'^\d+\s*(songs?|tracks?)$').hasMatch(normalized)) return true;
+    return false;
+  }
+
+  String _fallbackArtistFromChartSubtitle() {
+    final subtitle = widget.chart.subtitle.trim();
+    if (subtitle.isEmpty) return '';
+    final parts = subtitle
+        .split(RegExp(r'\s*[•\u2022\|]\s*'))
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) return '';
+
+    for (final part in parts) {
+      if (_isLikelyMetaSubtitlePart(part)) continue;
+      return part;
+    }
+    return '';
+  }
+
+  List<SaavnSong> _applyFallbackArtistToSongs(List<SaavnSong> songs) {
+    if (songs.isEmpty) return songs;
+    final fallbackArtist = _fallbackArtistFromChartSubtitle();
+    if (fallbackArtist.isEmpty) return songs;
+
+    var changed = false;
+    final out = songs
+        .map((song) {
+          if (!_isUnknownArtistValue(song.artists)) return song;
+          changed = true;
+          return SaavnSong(
+            id: song.id,
+            name: song.name,
+            artists: fallbackArtist,
+            imageUrl: song.imageUrl,
+            duration: song.duration,
+            downloadUrls: song.downloadUrls,
+          );
+        })
+        .toList(growable: false);
+
+    return changed ? out : songs;
+  }
+
   String _preferredPlaybackArtUrl(SaavnSong song) {
     final candidates = YoutubeThumbnailUtils.candidateUrls(
       songId: song.id,
@@ -329,7 +416,9 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
               future: _songsFuture,
               builder: (context, snapshot) {
                 final baseSongs = snapshot.data ?? const <SaavnSong>[];
-                final songs = _enhancedSongs ?? baseSongs;
+                final songs = _applyFallbackArtistToSongs(
+                  _enhancedSongs ?? baseSongs,
+                );
                 final queuedSongs = songs
                     .map(
                       (s) => QueuedSong(
