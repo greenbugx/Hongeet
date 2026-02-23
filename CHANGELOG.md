@@ -13,7 +13,6 @@
 ### UPCOMING (work in progress)
 
 - Better relevance tuning for search and recommendations
-- Discord Rich Presence
 - Lyrics support(targeted for v1.6+)
 
 # v1.5.0+15
