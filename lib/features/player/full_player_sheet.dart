@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'dart:collection';
+import 'dart:math' as math;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:marquee/marquee.dart';
@@ -12,6 +14,7 @@ import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/glass_container.dart';
 import '../../core/utils/streaming_preferences.dart';
 import '../../data/api/local_backend_api.dart';
+import '../../data/api/lrclib_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../core/utils/app_messenger.dart';
 import '../../core/theme/app_theme.dart';
@@ -469,509 +472,536 @@ class FullPlayerSheet extends StatelessWidget {
                             const SizedBox(height: 16),
 
                             RepaintBoundary(
-                              child: GlassContainer(
-                                borderRadius: BorderRadius.circular(32),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                    children: [
-                                      Container(
-                                        width: 36,
-                                        height: 4,
-                                        margin: const EdgeInsets.only(
-                                          bottom: 16,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white30,
-                                          borderRadius: BorderRadius.circular(
-                                            2,
+                              child: _SwipeLyricsPlayerCard(
+                                song: currentSong,
+                                player: player,
+                                useGlassTheme: theme.useGlassTheme,
+                                frontCard: GlassContainer(
+                                  borderRadius: BorderRadius.circular(32),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(20),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          width: 36,
+                                          height: 4,
+                                          margin: const EdgeInsets.only(
+                                            bottom: 16,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white30,
+                                            borderRadius: BorderRadius.circular(
+                                              2,
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      AspectRatio(
-                                        aspectRatio: 1,
-                                        child: ClipRRect(
-                                          clipBehavior: Clip.antiAlias,
-                                          borderRadius: BorderRadius.circular(
-                                            22,
-                                          ),
-                                          child: Transform.scale(
-                                            scale: currentArtScale,
-                                            child: FallbackNetworkImage(
-                                              urls: currentArtCandidates,
-                                              fit: BoxFit.cover,
-                                              alignment: Alignment.center,
-                                              cacheWidth: mainArtCacheSize,
-                                              cacheHeight: mainArtCacheSize,
-                                              filterQuality:
-                                                  FilterQuality.medium,
-                                              fallback: Container(
-                                                color: Colors.black26,
-                                                child: const Icon(
-                                                  Icons.music_note_rounded,
-                                                  size: 56,
+                                        AspectRatio(
+                                          aspectRatio: 1,
+                                          child: ClipRRect(
+                                            clipBehavior: Clip.antiAlias,
+                                            borderRadius: BorderRadius.circular(
+                                              22,
+                                            ),
+                                            child: Transform.scale(
+                                              scale: currentArtScale,
+                                              child: FallbackNetworkImage(
+                                                urls: currentArtCandidates,
+                                                fit: BoxFit.cover,
+                                                alignment: Alignment.center,
+                                                cacheWidth: mainArtCacheSize,
+                                                cacheHeight: mainArtCacheSize,
+                                                filterQuality:
+                                                    FilterQuality.medium,
+                                                fallback: Container(
+                                                  color: Colors.black26,
+                                                  child: const Icon(
+                                                    Icons.music_note_rounded,
+                                                    size: 56,
+                                                  ),
                                                 ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
 
-                                      const SizedBox(height: 20),
+                                        const SizedBox(height: 20),
 
-                                      SizedBox(
-                                        height: 26,
-                                        child: _AutoMarqueeText(
-                                          text: now.title,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w600,
+                                        SizedBox(
+                                          height: 26,
+                                          child: _AutoMarqueeText(
+                                            text: now.title,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      const SizedBox(height: 6),
+                                        const SizedBox(height: 6),
 
-                                      SizedBox(
-                                        height: 20,
-                                        child: _AutoMarqueeText(
-                                          text: now.artist,
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.white70,
+                                        SizedBox(
+                                          height: 20,
+                                          child: _AutoMarqueeText(
+                                            text: now.artist,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.white70,
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      const SizedBox(height: 20),
+                                        const SizedBox(height: 20),
 
-                                      StreamBuilder<bool>(
-                                        stream: player.trackLoadingStream,
-                                        initialData: player.isTrackLoading,
-                                        builder: (_, loadingSnap) {
-                                          final isTrackLoading =
-                                              loadingSnap.data ?? false;
-                                          return StreamBuilder<Duration>(
-                                            stream: player.positionStream,
-                                            builder: (_, posSnap) {
-                                              final livePos =
-                                                  posSnap.data ?? Duration.zero;
-                                              return StreamBuilder<Duration?>(
-                                                stream: player.durationStream,
-                                                builder: (_, durSnap) {
-                                                  final liveDur =
-                                                      durSnap.data ??
-                                                      Duration.zero;
-                                                  final shownPos =
-                                                      isTrackLoading
-                                                      ? Duration.zero
-                                                      : livePos;
-                                                  final shownDur =
-                                                      isTrackLoading
-                                                      ? Duration.zero
-                                                      : liveDur;
-                                                  final max =
-                                                      shownDur.inSeconds > 0
-                                                      ? shownDur.inSeconds
-                                                            .toDouble()
-                                                      : 1.0;
+                                        StreamBuilder<bool>(
+                                          stream: player.trackLoadingStream,
+                                          initialData: player.isTrackLoading,
+                                          builder: (_, loadingSnap) {
+                                            final isTrackLoading =
+                                                loadingSnap.data ?? false;
+                                            return StreamBuilder<Duration>(
+                                              stream: player.positionStream,
+                                              builder: (_, posSnap) {
+                                                final livePos =
+                                                    posSnap.data ??
+                                                    Duration.zero;
+                                                return StreamBuilder<Duration?>(
+                                                  stream: player.durationStream,
+                                                  builder: (_, durSnap) {
+                                                    final liveDur =
+                                                        durSnap.data ??
+                                                        Duration.zero;
+                                                    final shownPos =
+                                                        isTrackLoading
+                                                        ? Duration.zero
+                                                        : livePos;
+                                                    final shownDur =
+                                                        isTrackLoading
+                                                        ? Duration.zero
+                                                        : liveDur;
+                                                    final max =
+                                                        shownDur.inSeconds > 0
+                                                        ? shownDur.inSeconds
+                                                              .toDouble()
+                                                        : 1.0;
 
-                                                  return Column(
-                                                    children: [
-                                                      PlayerProgressBar(
-                                                        value: shownPos
-                                                            .inSeconds
-                                                            .toDouble()
-                                                            .clamp(0, max),
-                                                        max: max,
-                                                        style: theme
-                                                            .effectiveProgressBarStyle,
-                                                        useGlassTheme:
-                                                            theme.useGlassTheme,
-                                                        onChanged:
-                                                            isTrackLoading
-                                                            ? (_) {}
-                                                            : (
-                                                                v,
-                                                              ) => player.seek(
-                                                                Duration(
-                                                                  seconds: v
-                                                                      .toInt(),
+                                                    return Column(
+                                                      children: [
+                                                        PlayerProgressBar(
+                                                          value: shownPos
+                                                              .inSeconds
+                                                              .toDouble()
+                                                              .clamp(0, max),
+                                                          max: max,
+                                                          style: theme
+                                                              .effectiveProgressBarStyle,
+                                                          useGlassTheme: theme
+                                                              .useGlassTheme,
+                                                          onChanged:
+                                                              isTrackLoading
+                                                              ? (_) {}
+                                                              : (
+                                                                  v,
+                                                                ) => player.seek(
+                                                                  Duration(
+                                                                    seconds: v
+                                                                        .toInt(),
+                                                                  ),
+                                                                ),
+                                                        ),
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 6,
+                                                              ),
+                                                          child: Row(
+                                                            mainAxisAlignment:
+                                                                MainAxisAlignment
+                                                                    .spaceBetween,
+                                                            children: [
+                                                              Text(
+                                                                _fmt(shownPos),
+                                                                style: const TextStyle(
+                                                                  fontSize: 12,
+                                                                  color: Colors
+                                                                      .white70,
                                                                 ),
                                                               ),
-                                                      ),
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                              horizontal: 6,
-                                                            ),
-                                                        child: Row(
-                                                          mainAxisAlignment:
-                                                              MainAxisAlignment
-                                                                  .spaceBetween,
-                                                          children: [
-                                                            Text(
-                                                              _fmt(shownPos),
-                                                              style:
-                                                                  const TextStyle(
-                                                                    fontSize:
-                                                                        12,
-                                                                    color: Colors
-                                                                        .white70,
-                                                                  ),
-                                                            ),
-                                                            Text(
-                                                              _fmt(shownDur),
-                                                              style:
-                                                                  const TextStyle(
-                                                                    fontSize:
-                                                                        12,
-                                                                    color: Colors
-                                                                        .white70,
-                                                                  ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  );
-                                                },
-                                              );
-                                            },
-                                          );
-                                        },
-                                      ),
-
-                                      const SizedBox(height: 12),
-
-                                      Column(
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              SizedBox(
-                                                width: 48,
-                                                child: StreamBuilder<LoopMode>(
-                                                  stream: player.loopModeStream,
-                                                  builder: (_, snap) {
-                                                    final mode =
-                                                        snap.data ??
-                                                        LoopMode.off;
-                                                    return IconButton(
-                                                      icon: Icon(
-                                                        mode == LoopMode.one
-                                                            ? (theme.useGlassTheme
-                                                                  ? CupertinoIcons
-                                                                        .repeat_1
-                                                                  : Icons
-                                                                        .repeat_one)
-                                                            : (theme.useGlassTheme
-                                                                  ? CupertinoIcons
-                                                                        .repeat
-                                                                  : Icons
-                                                                        .repeat),
-                                                        color:
-                                                            mode == LoopMode.off
-                                                            ? Colors.white54
-                                                            : Colors.white,
-                                                      ),
-                                                      onPressed:
-                                                          player.toggleLoopMode,
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                              SizedBox(
-                                                width: 52,
-                                                child: IconButton(
-                                                  icon: Icon(
-                                                    theme.useGlassTheme
-                                                        ? CupertinoIcons
-                                                              .backward_end_fill
-                                                        : Icons.skip_previous,
-                                                  ),
-                                                  iconSize: 30,
-                                                  onPressed:
-                                                      player.skipPrevious,
-                                                ),
-                                              ),
-                                              SizedBox(
-                                                width: 72,
-                                                child: StreamBuilder<bool>(
-                                                  stream:
-                                                      player.trackLoadingStream,
-                                                  initialData:
-                                                      player.isTrackLoading,
-                                                  builder: (_, loadingSnap) {
-                                                    final isLoading =
-                                                        loadingSnap.data ??
-                                                        false;
-                                                    return StreamBuilder(
-                                                      stream: player
-                                                          .playerStateStream,
-                                                      builder: (_, snap) {
-                                                        final playing =
-                                                            snap
-                                                                .data
-                                                                ?.playing ??
-                                                            false;
-                                                        return AnimatedSwitcher(
-                                                          duration:
-                                                              const Duration(
-                                                                milliseconds:
-                                                                    200,
-                                                              ),
-                                                          child: isLoading
-                                                              ? SizedBox(
-                                                                  key: const ValueKey(
-                                                                    'loading',
-                                                                  ),
-                                                                  width: 56,
-                                                                  height: 56,
-                                                                  child: Center(
-                                                                    child: SizedBox(
-                                                                      width: 28,
-                                                                      height:
-                                                                          28,
-                                                                      child: CircularProgressIndicator(
-                                                                        strokeWidth:
-                                                                            2.8,
-                                                                        valueColor:
-                                                                            AlwaysStoppedAnimation<
-                                                                              Color
-                                                                            >(
-                                                                              Colors.white,
-                                                                            ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                )
-                                                              : IconButton(
-                                                                  key: ValueKey(
-                                                                    playing,
-                                                                  ),
-                                                                  iconSize: 56,
-                                                                  icon: Icon(
-                                                                    playing
-                                                                        ? (theme.useGlassTheme
-                                                                              ? CupertinoIcons.pause_circle_fill
-                                                                              : Icons.pause_circle_filled)
-                                                                        : (theme.useGlassTheme
-                                                                              ? CupertinoIcons.play_circle_fill
-                                                                              : Icons.play_circle_filled),
-                                                                  ),
-                                                                  onPressed: player
-                                                                      .togglePlayPause,
+                                                              Text(
+                                                                _fmt(shownDur),
+                                                                style: const TextStyle(
+                                                                  fontSize: 12,
+                                                                  color: Colors
+                                                                      .white70,
                                                                 ),
-                                                        );
-                                                      },
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ],
                                                     );
                                                   },
-                                                ),
-                                              ),
-                                              SizedBox(
-                                                width: 52,
-                                                child: IconButton(
-                                                  icon: Icon(
-                                                    theme.useGlassTheme
-                                                        ? CupertinoIcons
-                                                              .forward_end_fill
-                                                        : Icons.skip_next,
-                                                  ),
-                                                  iconSize: 30,
-                                                  onPressed: player.skipNext,
-                                                ),
-                                              ),
-                                              if (hasRemoteTrack)
-                                                SizedBox(
-                                                  width: 48,
-                                                  child: IconButton(
-                                                    icon: Icon(
-                                                      theme.useGlassTheme
-                                                          ? CupertinoIcons
-                                                                .arrow_down
-                                                          : Icons.download,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _downloadSong(
-                                                          currentSong,
-                                                        ),
-                                                  ),
-                                                ),
-                                              if (!hasRemoteTrack &&
-                                                  hasDownloadedLocalTrack)
-                                                SizedBox(
-                                                  width: 48,
-                                                  child: IconButton(
-                                                    icon: Icon(
-                                                      theme.useGlassTheme
-                                                          ? CupertinoIcons.trash
-                                                          : Icons
-                                                                .delete_outline,
-                                                      color: Colors.redAccent,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _deleteDownloadedSong(
-                                                          context,
-                                                          currentSong!,
-                                                          player,
-                                                        ),
-                                                  ),
-                                                ),
-                                              if (_isLocalAudio(currentSong))
-                                                SizedBox(
-                                                  width: 48,
-                                                  child: IconButton(
-                                                    icon: Icon(
-                                                      theme.useGlassTheme
-                                                          ? CupertinoIcons.trash
-                                                          : Icons
-                                                                .delete_outline,
-                                                      color: Colors.redAccent,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _deleteLocalAudio(
-                                                          context,
-                                                          currentSong!,
-                                                          player,
-                                                        ),
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          if (currentSong != null) ...[
-                                            const SizedBox(height: 8),
+                                                );
+                                              },
+                                            );
+                                          },
+                                        ),
 
+                                        const SizedBox(height: 12),
+
+                                        Column(
+                                          children: [
                                             Row(
                                               mainAxisAlignment:
                                                   MainAxisAlignment.center,
                                               children: [
-                                                if (hasRemoteTrack) ...[
-                                                  StreamBuilder<
-                                                    Map<
-                                                      String,
-                                                      List<Map<String, dynamic>>
-                                                    >
-                                                  >(
+                                                SizedBox(
+                                                  width: 48,
+                                                  child: StreamBuilder<LoopMode>(
                                                     stream:
-                                                        PlaylistManager.stream,
+                                                        player.loopModeStream,
                                                     builder: (_, snap) {
-                                                      final playlists =
-                                                          snap.data ?? {};
-                                                      final favs =
-                                                          playlists[PlaylistManager
-                                                              .systemFavourites] ??
-                                                          [];
-                                                      final isFav = favs.any(
-                                                        (s) =>
-                                                            s['id'] ==
-                                                            currentSong.id,
-                                                      );
-
+                                                      final mode =
+                                                          snap.data ??
+                                                          LoopMode.off;
                                                       return IconButton(
                                                         icon: Icon(
-                                                          theme.useGlassTheme
-                                                              ? (isFav
+                                                          mode == LoopMode.one
+                                                              ? (theme.useGlassTheme
                                                                     ? CupertinoIcons
-                                                                          .heart_fill
-                                                                    : CupertinoIcons
-                                                                          .heart)
-                                                              : (isFav
-                                                                    ? Icons
-                                                                          .favorite
+                                                                          .repeat_1
                                                                     : Icons
-                                                                          .favorite_border),
-                                                          color: isFav
-                                                              ? Colors.redAccent
-                                                              : Colors.white70,
+                                                                          .repeat_one)
+                                                              : (theme.useGlassTheme
+                                                                    ? CupertinoIcons
+                                                                          .repeat
+                                                                    : Icons
+                                                                          .repeat),
+                                                          color:
+                                                              mode ==
+                                                                  LoopMode.off
+                                                              ? Colors.white54
+                                                              : Colors.white,
                                                         ),
-                                                        iconSize: 26,
-                                                        onPressed: () async =>
-                                                            await PlaylistManager.toggleFavourite({
-                                                              'id': currentSong
-                                                                  .id,
-                                                              'title':
-                                                                  currentSong
-                                                                      .meta
-                                                                      .title,
-                                                              'artist':
-                                                                  currentSong
-                                                                      .meta
-                                                                      .artist,
-                                                              'imageUrl':
-                                                                  currentSong
-                                                                      .meta
-                                                                      .imageUrl,
-                                                            }),
+                                                        onPressed: player
+                                                            .toggleLoopMode,
                                                       );
                                                     },
                                                   ),
-                                                  const SizedBox(width: 12),
-                                                ],
-                                                StreamBuilder<SleepTimerStatus>(
-                                                  stream:
-                                                      player.sleepTimerStream,
-                                                  initialData:
-                                                      player.sleepTimerStatus,
-                                                  builder: (_, snap) {
-                                                    final timerStatus =
-                                                        snap.data ??
-                                                        const SleepTimerStatus.off();
-                                                    return IconButton(
-                                                      tooltip:
-                                                          timerStatus.isActive
-                                                          ? 'Sleep timer: ${_sleepTimerLabel(timerStatus)}'
-                                                          : 'Sleep timer',
-                                                      icon: Icon(
-                                                        theme.useGlassTheme
-                                                            ? CupertinoIcons
-                                                                  .moon
-                                                            : Icons
-                                                                  .bedtime_outlined,
-                                                        color:
-                                                            timerStatus.isActive
-                                                            ? Colors
-                                                                  .lightBlueAccent
-                                                            : Colors.white70,
-                                                      ),
-                                                      iconSize: 26,
-                                                      onPressed: () {
-                                                        _showSleepTimerSheet(
-                                                          context,
-                                                          player,
-                                                          theme.useGlassTheme,
-                                                        );
-                                                      },
-                                                    );
-                                                  },
                                                 ),
-                                                if (hasRemoteTrack) ...[
-                                                  const SizedBox(width: 12),
-                                                  IconButton(
+                                                SizedBox(
+                                                  width: 52,
+                                                  child: IconButton(
                                                     icon: Icon(
                                                       theme.useGlassTheme
                                                           ? CupertinoIcons
-                                                                .music_note_list
-                                                          : Icons.playlist_add,
-                                                      color: Colors.white70,
+                                                                .backward_end_fill
+                                                          : Icons.skip_previous,
                                                     ),
-                                                    iconSize: 26,
-                                                    onPressed: () {
-                                                      _showAddToPlaylistSheet(
-                                                        context,
-                                                        currentSong,
+                                                    iconSize: 30,
+                                                    onPressed:
+                                                        player.skipPrevious,
+                                                  ),
+                                                ),
+                                                SizedBox(
+                                                  width: 72,
+                                                  child: StreamBuilder<bool>(
+                                                    stream: player
+                                                        .trackLoadingStream,
+                                                    initialData:
+                                                        player.isTrackLoading,
+                                                    builder: (_, loadingSnap) {
+                                                      final isLoading =
+                                                          loadingSnap.data ??
+                                                          false;
+                                                      return StreamBuilder(
+                                                        stream: player
+                                                            .playerStateStream,
+                                                        builder: (_, snap) {
+                                                          final playing =
+                                                              snap
+                                                                  .data
+                                                                  ?.playing ??
+                                                              false;
+                                                          return AnimatedSwitcher(
+                                                            duration:
+                                                                const Duration(
+                                                                  milliseconds:
+                                                                      200,
+                                                                ),
+                                                            child: isLoading
+                                                                ? SizedBox(
+                                                                    key: const ValueKey(
+                                                                      'loading',
+                                                                    ),
+                                                                    width: 56,
+                                                                    height: 56,
+                                                                    child: Center(
+                                                                      child: SizedBox(
+                                                                        width:
+                                                                            28,
+                                                                        height:
+                                                                            28,
+                                                                        child: CircularProgressIndicator(
+                                                                          strokeWidth:
+                                                                              2.8,
+                                                                          valueColor:
+                                                                              AlwaysStoppedAnimation<
+                                                                                Color
+                                                                              >(
+                                                                                Colors.white,
+                                                                              ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  )
+                                                                : IconButton(
+                                                                    key: ValueKey(
+                                                                      playing,
+                                                                    ),
+                                                                    iconSize:
+                                                                        56,
+                                                                    icon: Icon(
+                                                                      playing
+                                                                          ? (theme.useGlassTheme
+                                                                                ? CupertinoIcons.pause_circle_fill
+                                                                                : Icons.pause_circle_filled)
+                                                                          : (theme.useGlassTheme
+                                                                                ? CupertinoIcons.play_circle_fill
+                                                                                : Icons.play_circle_filled),
+                                                                    ),
+                                                                    onPressed:
+                                                                        player
+                                                                            .togglePlayPause,
+                                                                  ),
+                                                          );
+                                                        },
                                                       );
                                                     },
                                                   ),
-                                                ],
+                                                ),
+                                                SizedBox(
+                                                  width: 52,
+                                                  child: IconButton(
+                                                    icon: Icon(
+                                                      theme.useGlassTheme
+                                                          ? CupertinoIcons
+                                                                .forward_end_fill
+                                                          : Icons.skip_next,
+                                                    ),
+                                                    iconSize: 30,
+                                                    onPressed: player.skipNext,
+                                                  ),
+                                                ),
+                                                if (hasRemoteTrack)
+                                                  SizedBox(
+                                                    width: 48,
+                                                    child: IconButton(
+                                                      icon: Icon(
+                                                        theme.useGlassTheme
+                                                            ? CupertinoIcons
+                                                                  .arrow_down
+                                                            : Icons.download,
+                                                      ),
+                                                      onPressed: () =>
+                                                          _downloadSong(
+                                                            currentSong,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                if (!hasRemoteTrack &&
+                                                    hasDownloadedLocalTrack)
+                                                  SizedBox(
+                                                    width: 48,
+                                                    child: IconButton(
+                                                      icon: Icon(
+                                                        theme.useGlassTheme
+                                                            ? CupertinoIcons
+                                                                  .trash
+                                                            : Icons
+                                                                  .delete_outline,
+                                                        color: Colors.redAccent,
+                                                      ),
+                                                      onPressed: () =>
+                                                          _deleteDownloadedSong(
+                                                            context,
+                                                            currentSong!,
+                                                            player,
+                                                          ),
+                                                    ),
+                                                  ),
+                                                if (_isLocalAudio(currentSong))
+                                                  SizedBox(
+                                                    width: 48,
+                                                    child: IconButton(
+                                                      icon: Icon(
+                                                        theme.useGlassTheme
+                                                            ? CupertinoIcons
+                                                                  .trash
+                                                            : Icons
+                                                                  .delete_outline,
+                                                        color: Colors.redAccent,
+                                                      ),
+                                                      onPressed: () =>
+                                                          _deleteLocalAudio(
+                                                            context,
+                                                            currentSong!,
+                                                            player,
+                                                          ),
+                                                    ),
+                                                  ),
                                               ],
                                             ),
+                                            if (currentSong != null) ...[
+                                              const SizedBox(height: 8),
+
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  if (hasRemoteTrack) ...[
+                                                    StreamBuilder<
+                                                      Map<
+                                                        String,
+                                                        List<
+                                                          Map<String, dynamic>
+                                                        >
+                                                      >
+                                                    >(
+                                                      stream: PlaylistManager
+                                                          .stream,
+                                                      builder: (_, snap) {
+                                                        final playlists =
+                                                            snap.data ?? {};
+                                                        final favs =
+                                                            playlists[PlaylistManager
+                                                                .systemFavourites] ??
+                                                            [];
+                                                        final isFav = favs.any(
+                                                          (s) =>
+                                                              s['id'] ==
+                                                              currentSong.id,
+                                                        );
+
+                                                        return IconButton(
+                                                          icon: Icon(
+                                                            theme.useGlassTheme
+                                                                ? (isFav
+                                                                      ? CupertinoIcons
+                                                                            .heart_fill
+                                                                      : CupertinoIcons
+                                                                            .heart)
+                                                                : (isFav
+                                                                      ? Icons
+                                                                            .favorite
+                                                                      : Icons
+                                                                            .favorite_border),
+                                                            color: isFav
+                                                                ? Colors
+                                                                      .redAccent
+                                                                : Colors
+                                                                      .white70,
+                                                          ),
+                                                          iconSize: 26,
+                                                          onPressed: () async =>
+                                                              await PlaylistManager.toggleFavourite({
+                                                                'id':
+                                                                    currentSong
+                                                                        .id,
+                                                                'title':
+                                                                    currentSong
+                                                                        .meta
+                                                                        .title,
+                                                                'artist':
+                                                                    currentSong
+                                                                        .meta
+                                                                        .artist,
+                                                                'imageUrl':
+                                                                    currentSong
+                                                                        .meta
+                                                                        .imageUrl,
+                                                              }),
+                                                        );
+                                                      },
+                                                    ),
+                                                    const SizedBox(width: 12),
+                                                  ],
+                                                  StreamBuilder<
+                                                    SleepTimerStatus
+                                                  >(
+                                                    stream:
+                                                        player.sleepTimerStream,
+                                                    initialData:
+                                                        player.sleepTimerStatus,
+                                                    builder: (_, snap) {
+                                                      final timerStatus =
+                                                          snap.data ??
+                                                          const SleepTimerStatus.off();
+                                                      return IconButton(
+                                                        tooltip:
+                                                            timerStatus.isActive
+                                                            ? 'Sleep timer: ${_sleepTimerLabel(timerStatus)}'
+                                                            : 'Sleep timer',
+                                                        icon: Icon(
+                                                          theme.useGlassTheme
+                                                              ? CupertinoIcons
+                                                                    .moon
+                                                              : Icons
+                                                                    .bedtime_outlined,
+                                                          color:
+                                                              timerStatus
+                                                                  .isActive
+                                                              ? Colors
+                                                                    .lightBlueAccent
+                                                              : Colors.white70,
+                                                        ),
+                                                        iconSize: 26,
+                                                        onPressed: () {
+                                                          _showSleepTimerSheet(
+                                                            context,
+                                                            player,
+                                                            theme.useGlassTheme,
+                                                          );
+                                                        },
+                                                      );
+                                                    },
+                                                  ),
+                                                  if (hasRemoteTrack) ...[
+                                                    const SizedBox(width: 12),
+                                                    IconButton(
+                                                      icon: Icon(
+                                                        theme.useGlassTheme
+                                                            ? CupertinoIcons
+                                                                  .music_note_list
+                                                            : Icons
+                                                                  .playlist_add,
+                                                        color: Colors.white70,
+                                                      ),
+                                                      iconSize: 26,
+                                                      onPressed: () {
+                                                        _showAddToPlaylistSheet(
+                                                          context,
+                                                          currentSong,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ],
+                                            const SizedBox(height: 12),
+                                            const Text(
+                                              'Swipe right for lyrics',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.white54,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
                                           ],
-                                        ],
-                                      ),
-                                    ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1463,6 +1493,525 @@ class _AutoMarqueeText extends StatelessWidget {
           velocity: 28,
           pauseAfterRound: const Duration(seconds: 1),
           style: style,
+        );
+      },
+    );
+  }
+}
+
+class _SwipeLyricsPlayerCard extends StatefulWidget {
+  final QueuedSong? song;
+  final AudioPlayerService player;
+  final bool useGlassTheme;
+  final Widget frontCard;
+
+  const _SwipeLyricsPlayerCard({
+    required this.song,
+    required this.player,
+    required this.useGlassTheme,
+    required this.frontCard,
+  });
+
+  @override
+  State<_SwipeLyricsPlayerCard> createState() => _SwipeLyricsPlayerCardState();
+}
+
+class _SwipeLyricsPlayerCardState extends State<_SwipeLyricsPlayerCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _flipController;
+  Future<LrcLibLyrics?>? _lyricsFuture;
+  String? _lyricsSongId;
+  double _dragDx = 0;
+  double _dragDy = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _flipController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
+    _syncLyricsRequest();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SwipeLyricsPlayerCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncLyricsRequest();
+    final nextSong = widget.song;
+    if ((nextSong == null || nextSong.isLocal) && _flipController.value > 0) {
+      _flipController.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _flipController.dispose();
+    super.dispose();
+  }
+
+  void _syncLyricsRequest() {
+    final song = widget.song;
+    final songId = song?.id;
+    if (songId == _lyricsSongId) return;
+    _lyricsSongId = songId;
+
+    if (song == null || song.isLocal) {
+      _lyricsFuture = null;
+      return;
+    }
+
+    _lyricsFuture = LrcLibApi.fetchBestLyrics(
+      title: song.meta.title,
+      artist: song.meta.artist,
+    );
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    _dragDx += details.delta.dx;
+    _dragDy += details.delta.dy;
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.velocity.pixelsPerSecond.dx;
+
+    final isMostlyHorizontal = _dragDx.abs() > _dragDy.abs() * 1.2;
+
+    if (!isMostlyHorizontal) {
+      _resetDrag();
+      return;
+    }
+
+    const distanceThreshold = 90.0;
+    const velocityThreshold = 700.0;
+
+    final swipeRight =
+        _dragDx > distanceThreshold || velocity > velocityThreshold;
+
+    final swipeLeft =
+        _dragDx < -distanceThreshold || velocity < -velocityThreshold;
+
+    if (swipeRight && _flipController.value < 0.5) {
+      _flipToLyrics();
+    } else if (swipeLeft && _flipController.value >= 0.5) {
+      _flipToPlayer();
+    }
+
+    _resetDrag();
+  }
+
+  void _resetDrag() {
+    _dragDx = 0;
+    _dragDy = 0;
+  }
+
+  void _flipToLyrics() {
+    final song = widget.song;
+    if (song == null || song.isLocal) return;
+    _flipController.forward();
+  }
+
+  void _flipToPlayer() {
+    _flipController.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragUpdate: _onHorizontalDragUpdate,
+      onHorizontalDragEnd: _onHorizontalDragEnd,
+      child: AnimatedBuilder(
+        animation: _flipController,
+        builder: (context, _) {
+          final value = _flipController.value;
+          final showingFront = value < 0.5;
+          final angle = showingFront ? value * math.pi : (value - 1) * math.pi;
+
+          final transform = Matrix4.identity()
+            ..setEntry(3, 2, 0.0018)
+            ..rotateY(angle);
+
+          final visibleChild = showingFront
+              ? widget.frontCard
+              : _LyricsBackCard(
+                  song: widget.song,
+                  player: widget.player,
+                  useGlassTheme: widget.useGlassTheme,
+                  lyricsFuture: _lyricsFuture,
+                );
+
+          return Transform(
+            alignment: Alignment.center,
+            transform: transform,
+            child: visibleChild,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _LyricsBackCard extends StatelessWidget {
+  final QueuedSong? song;
+  final AudioPlayerService player;
+  final bool useGlassTheme;
+  final Future<LrcLibLyrics?>? lyricsFuture;
+
+  const _LyricsBackCard({
+    required this.song,
+    required this.player,
+    required this.useGlassTheme,
+    required this.lyricsFuture,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final activeSong = song;
+    return GlassContainer(
+      borderRadius: BorderRadius.circular(32),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.white30,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Row(
+              children: [
+                Icon(
+                  useGlassTheme
+                      ? CupertinoIcons.music_note_2
+                      : Icons.lyrics_outlined,
+                  size: 20,
+                  color: Colors.white70,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Lyrics',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                FutureBuilder<LrcLibLyrics?>(
+                  future: lyricsFuture,
+                  builder: (context, snap) {
+                    if (snap.data == null) return const SizedBox.shrink();
+                    final isSynced = snap.data!.hasSyncedLyrics;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSynced
+                            ? Colors.white.withValues(alpha: 0.15)
+                            : Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Text(
+                        isSynced ? '✦ Synced' : 'Plain',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'Helvetica',
+                          fontWeight: FontWeight.w700,
+                          color: isSynced ? Colors.white : Colors.white54,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (activeSong == null)
+              const SizedBox(
+                height: 360,
+                child: Center(
+                  child: Text(
+                    'No song playing',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              )
+            else if (activeSong.isLocal)
+              const SizedBox(
+                height: 360,
+                child: Center(
+                  child: Text(
+                    'Lyrics are currently available for streaming tracks only.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 360,
+                child: FutureBuilder<LrcLibLyrics?>(
+                  future: lyricsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError) {
+                      return const Center(
+                        child: Text(
+                          'Lyrics failed to load.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      );
+                    }
+
+                    final lyrics = snapshot.data;
+                    if (lyrics == null) {
+                      return const Center(
+                        child: Text(
+                          'No lyrics found for this song.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      );
+                    }
+
+                    if (lyrics.instrumental) {
+                      return const Center(
+                        child: Text(
+                          'Instrumental track.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      );
+                    }
+
+                    if (lyrics.hasSyncedLyrics) {
+                      return _SyncedLyricsView(
+                        key: ValueKey(lyrics),
+                        lines: lyrics.parsedLines,
+                        player: player,
+                      );
+                    }
+
+                    final plain = lyrics.plainLyrics.trim();
+                    if (plain.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No lyrics available.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      );
+                    }
+
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        plain,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontFamily: 'Helvetica',
+                          fontWeight: FontWeight.w400,
+                          color: Colors.white70,
+                          height: 1.7,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 12),
+            const Text(
+              'Swipe left to return to player controls',
+              style: TextStyle(fontSize: 12, color: Colors.white54),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SyncedLyricsView extends StatefulWidget {
+  final List<LyricLine> lines;
+  final AudioPlayerService player;
+
+  const _SyncedLyricsView({
+    super.key,
+    required this.lines,
+    required this.player,
+  });
+
+  @override
+  State<_SyncedLyricsView> createState() => _SyncedLyricsViewState();
+}
+
+class _SyncedLyricsViewState extends State<_SyncedLyricsView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late Animation<double> _indexAnim;
+  StreamSubscription<Duration>? _positionSub;
+  int _activeIndex = 0;
+  static const double _lineHeight = 72.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    final initialIndex = _findActiveIndex(widget.player.player.position);
+    _activeIndex = initialIndex;
+    _indexAnim = _buildAnim(initialIndex.toDouble(), initialIndex.toDouble());
+    _positionSub = widget.player.positionStream.listen(_onPositionChanged);
+  }
+
+  Animation<double> _buildAnim(double from, double to) {
+    return Tween<double>(begin: from, end: to).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _SyncedLyricsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.player, widget.player)) {
+      _positionSub?.cancel();
+      _positionSub = widget.player.positionStream.listen(_onPositionChanged);
+    }
+    if (!identical(oldWidget.lines, widget.lines)) {
+      final idx = _findActiveIndex(widget.player.player.position);
+      _activeIndex = idx;
+      _indexAnim = _buildAnim(idx.toDouble(), idx.toDouble());
+      _animController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _onPositionChanged(Duration position) {
+    if (!mounted || widget.lines.isEmpty) return;
+    final next = _findActiveIndex(position);
+    if (next == _activeIndex) return;
+    setState(() {
+      final from = _indexAnim.value;
+      _activeIndex = next;
+      _indexAnim = _buildAnim(from, next.toDouble());
+      _animController
+        ..reset()
+        ..forward();
+    });
+  }
+
+  int _findActiveIndex(Duration position) {
+    final lines = widget.lines;
+    final targetMs = position.inMilliseconds;
+    var low = 0, high = lines.length - 1, result = 0;
+    while (low <= high) {
+      final mid = low + ((high - low) >> 1);
+      if (lines[mid].start.inMilliseconds <= targetMs) {
+        result = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return result.clamp(0, lines.length - 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final centerY = constraints.maxHeight / 2 - _lineHeight / 2;
+
+        return ShaderMask(
+          shaderCallback: (rect) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.black,
+              Colors.black,
+              Colors.transparent,
+            ],
+            stops: [0.0, 0.22, 0.78, 1.0],
+          ).createShader(rect),
+          blendMode: BlendMode.dstIn,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _indexAnim,
+              builder: (context, _) {
+                final translateY = centerY - _indexAnim.value * _lineHeight;
+                return OverflowBox(
+                  maxHeight: double.infinity,
+                  alignment: Alignment.topCenter,
+                  child: Transform.translate(
+                    offset: Offset(0, translateY),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(widget.lines.length, (index) {
+                        final isActive = index == _activeIndex;
+                        final distance = (index - _activeIndex).abs();
+                        final opacity = isActive
+                            ? 1.0
+                            : (distance <= 1
+                                  ? 0.45
+                                  : (distance <= 3 ? 0.25 : 0.12));
+
+                        return SizedBox(
+                          height: _lineHeight,
+                          child: Center(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 300),
+                              opacity: opacity,
+                              child: AnimatedDefaultTextStyle(
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeOut,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  height: 1.3,
+                                  fontFamily: 'Helvetica',
+                                  fontWeight: isActive
+                                      ? FontWeight.w700
+                                      : FontWeight.w400,
+                                  color: Colors.white,
+                                ),
+                                child: Text(
+                                  widget.lines[index].text,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         );
       },
     );
