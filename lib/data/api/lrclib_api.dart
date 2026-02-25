@@ -120,6 +120,17 @@ class LrcLibApi {
       if (candidates.isNotEmpty) break;
     }
 
+    if (candidates.isEmpty) {
+      final broadResults = await _trySearchBroad(
+        title: variants.first,
+        artist: cleanedArtist,
+      );
+      for (final r in broadResults) {
+        final id = r['id']?.toString() ?? '';
+        if (id.isEmpty || seenIds.add(id)) candidates.add(r);
+      }
+    }
+
     if (candidates.isEmpty) return null;
 
     final scoringTitle = _normalizeForScoring(title);
@@ -166,6 +177,14 @@ class LrcLibApi {
 
     final hasNonLatin = full.contains(RegExp(r'[^\x00-\x7F]'));
     if (hasNonLatin) {
+      final nonLatinPart = full
+          .replaceAll(RegExp(r'[\x00-\x7F]+'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (nonLatinPart.isNotEmpty && !variants.contains(nonLatinPart)) {
+        variants.add(nonLatinPart);
+      }
+
       final latinPart = full
           .replaceAll(RegExp(r'[^\x00-\x7F]+'), ' ')
           .replaceAll(RegExp(r'\s+'), ' ')
@@ -226,6 +245,26 @@ class LrcLibApi {
       'artist_name': artist,
       if (album.trim().isNotEmpty) 'album_name': album.trim(),
     });
+
+    try {
+      final response = await http
+          .get(uri, headers: const {'Accept': 'application/json'})
+          .timeout(_timeout);
+      if (response.statusCode != 200) return const [];
+      final body = _decodeJsonBody(response.bodyBytes);
+      if (body is! List) return const [];
+      return body.whereType<Map<String, dynamic>>().toList(growable: false);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> _trySearchBroad({
+    required String title,
+    required String artist,
+  }) async {
+    final query = '$title $artist'.trim();
+    final uri = Uri.https(_host, '/api/search', <String, String>{'q': query});
 
     try {
       final response = await http
