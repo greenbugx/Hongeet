@@ -62,6 +62,10 @@ Hongeet is a music player that supports **offline local audio playback** and **o
 | :--- | :--- |
 | • History & Recents<br>• Loop modes (Off / All / One)<br>• Background playback service | • Glassmorphism-inspired design<br>• Smooth animations<br>• Full-screen & Mini player support |
 
+| 🎤 Lyrics | ⚙️ Performance |
+| :--- | :--- |
+| • Synchronized (LRC) lyrics support<br>• Unsynchronized lyrics display<br>• Auto-fetch & fallback handling | • Lightweight & fast startup<br>• Optimized caching system<br>• Battery-friendly background tasks |
+
 ---
 
 <h2 align=center> 📸 Screenshots </h2>
@@ -120,8 +124,9 @@ _For detailed info, please check [CONTRIBUTING.md](CONTRIBUTING.md)_
 
 This project wouldn’t exist without these amazing open-source libraries:
 
-* **youtube_explode_dart** — YouTube stream extraction in pure Dart  
-* **JioSaavn API (Unofficial)** — metadata & streaming access from JioSaavn
+* **[youtube_explode_dart](https://pub.dev/packages/youtube_explode_dart)** — YouTube stream extraction in pure Dart  
+* **[JioSaavn API (Unofficial)](https://saavn.sumit.co/)** — Metadata & streaming access from JioSaavn
+* **[LRCLib](https://lrclib.net/)** — Synchronized lyrics support along with clean display of Unsynchronized lyrics
 
 ---
 
