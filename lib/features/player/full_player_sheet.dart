@@ -1961,55 +1961,55 @@ class _SyncedLyricsViewState extends State<_SyncedLyricsView>
           child: ClipRect(
             child: AnimatedBuilder(
               animation: _indexAnim,
-              builder: (context, _) {
+              builder: (context, child) {
                 final translateY = centerY - _indexAnim.value * _lineHeight;
                 return OverflowBox(
                   maxHeight: double.infinity,
                   alignment: Alignment.topCenter,
                   child: Transform.translate(
                     offset: Offset(0, translateY),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(widget.lines.length, (index) {
-                        final isActive = index == _activeIndex;
-                        final distance = (index - _activeIndex).abs();
-                        final opacity = isActive
-                            ? 1.0
-                            : (distance <= 1
-                                  ? 0.45
-                                  : (distance <= 3 ? 0.25 : 0.12));
-
-                        return SizedBox(
-                          height: _lineHeight,
-                          child: Center(
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 300),
-                              opacity: opacity,
-                              child: AnimatedDefaultTextStyle(
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeOut,
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  height: 1.3,
-                                  fontFamily: 'Helvetica',
-                                  fontWeight: isActive
-                                      ? FontWeight.w700
-                                      : FontWeight.w400,
-                                  color: Colors.white,
-                                ),
-                                child: Text(
-                                  widget.lines[index].text,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
+                    child: child,
                   ),
                 );
               },
+
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(widget.lines.length, (index) {
+                  final isActive = index == _activeIndex;
+                  final distance = (index - _activeIndex).abs();
+                  final opacity = isActive
+                      ? 1.0
+                      : (distance <= 1 ? 0.45 : (distance <= 3 ? 0.25 : 0.12));
+
+                  return SizedBox(
+                    height: _lineHeight,
+                    child: Center(
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 300),
+                        opacity: opacity,
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                          style: TextStyle(
+                            fontSize: 17,
+                            height: 1.3,
+                            fontFamily: 'Helvetica',
+                            fontWeight: isActive
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            color: Colors.white,
+                          ),
+                          child: Text(
+                            widget.lines[index].text,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
             ),
           ),
         );
