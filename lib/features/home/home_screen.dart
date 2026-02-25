@@ -48,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     const navBottomPadding = 12.0;
     final samsungSafeBaseGap = (12.0 - (bottomInset * 0.2))
         .clamp(4.0, 12.0)
@@ -58,11 +59,13 @@ class _HomeScreenState extends State<HomeScreen> {
         (samsungSafeBaseGap + nonSamsungLiftBoost + samsungDownAdjust)
             .clamp(3.0, 24.0)
             .toDouble();
-    final miniPlayerBottom =
-        bottomInset +
-        navBottomPadding +
-        kBottomNavigationBarHeight +
-        miniGapAboveNav;
+
+    final miniPlayerBottom = keyboardHeight > 0
+        ? 8.0
+        : bottomInset +
+              navBottomPadding +
+              kBottomNavigationBarHeight +
+              miniGapAboveNav;
 
     final isLocalMode = !_useYoutube && !_useSaavn;
 
