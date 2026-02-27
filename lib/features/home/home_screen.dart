@@ -59,13 +59,11 @@ class _HomeScreenState extends State<HomeScreen> {
         (samsungSafeBaseGap + nonSamsungLiftBoost + samsungDownAdjust)
             .clamp(3.0, 24.0)
             .toDouble();
-
-    final miniPlayerBottom = keyboardHeight > 0
-        ? 8.0
-        : bottomInset +
-              navBottomPadding +
-              kBottomNavigationBarHeight +
-              miniGapAboveNav;
+    final miniPlayerBottom =
+        bottomInset +
+        navBottomPadding +
+        kBottomNavigationBarHeight +
+        miniGapAboveNav;
 
     final isLocalMode = !_useYoutube && !_useSaavn;
 
@@ -91,12 +89,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: miniPlayerBottom,
-            child: const MiniPlayer(),
-          ),
+          if (keyboardHeight == 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: miniPlayerBottom,
+              child: const MiniPlayer(),
+            ),
         ],
       ),
       bottomNavigationBar: Padding(
