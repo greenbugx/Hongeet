@@ -74,7 +74,7 @@ class LocalAudioProvider {
     base = base.replaceAll(RegExp(r'[_]+'), ' ');
     base = base.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (base.length <= _maxDisplayNameLength) return base;
-    return '${base.substring(0, _maxDisplayNameLength - 1)}…';
+    return '${base.substring(0, _maxDisplayNameLength - 1)}...';
   }
 
   static Future<List<LocalAudioTrack>> load({int maxItems = 500}) async {
