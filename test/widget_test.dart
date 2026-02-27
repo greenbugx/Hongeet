@@ -1,30 +1,79 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hongit/app.dart';
-
+import 'package:hongit/core/theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MusicApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() {
+    SharedPreferences.setMockInitialValues({
+      'use_glass_theme': false,
+      'progress_bar_style': 'defaultStyle',
+      'ui_performance_mode': 'auto',
+    });
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('ThemeProvider loads default dark theme', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => ThemeProvider(),
+        child: Builder(
+          builder: (context) {
+            final provider = Provider.of<ThemeProvider>(context);
+            return MaterialApp(
+              theme: provider.currentTheme,
+              home: const Scaffold(body: Text('ready')),
+            );
+          },
+        ),
+      ),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.text('ready'));
+    final theme = Theme.of(context);
+    expect(theme.brightness, Brightness.dark);
+    expect(find.text('ready'), findsOneWidget);
+  });
+
+  testWidgets('ThemeProvider can switch to glass theme', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      'use_glass_theme': false,
+      'progress_bar_style': 'defaultStyle',
+      'ui_performance_mode': 'auto',
+    });
+
+    final provider = ThemeProvider();
+    await tester.pumpWidget(
+      ChangeNotifierProvider<ThemeProvider>.value(
+        value: provider,
+        child: Builder(
+          builder: (context) {
+            final active = Provider.of<ThemeProvider>(context);
+            return MaterialApp(
+              theme: active.currentTheme,
+              home: Scaffold(
+                body: Text(
+                  active.useGlassTheme ? 'glass' : 'simple',
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('simple'), findsOneWidget);
+
+    await provider.setUseGlassTheme(true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('glass'), findsOneWidget);
+    final context = tester.element(find.text('glass'));
+    final theme = Theme.of(context);
+    expect(theme.scaffoldBackgroundColor, Colors.transparent);
   });
 }
