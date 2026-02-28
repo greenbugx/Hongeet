@@ -1,6 +1,6 @@
 v1.6.0+17
-- Added distribution flavors: github (startup auto update check) and izzy (no startup auto update check, policy-friendly for IzzyOnDroid).
-- Added Android widgets (2x2 and 4x2) with playback controls, artwork, and progress.
-- Fixed wide widget load/art rendering issues.
-- Fixed bottom-nav height inconsistency and mini-player overlap in 3-button navigation mode.
-- Release workflow now ships a separate izzy arm64-only APK artifact.
+- Added lyrics support (synced and unsynced).
+- Added flavors: github (startup auto-update check) and izzy (no startup auto-check).
+- Added Android widgets (2x2, 4x2) with controls, artwork, and progress.
+- Fixed 3-button mode bottom-nav height causing mini-player overlap.
+- CI now publishes a separate izzy arm64-only APK artifact.

@@ -2,5 +2,5 @@
   "latest": "v1.6.0+17",
   "min_supported": "v1.5.1+16",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
-  "notes": "Added distribution flavors: GitHub/SF keeps first-start update checks while Izzy disables them for policy compliance. Added 2x2 and 4x2 Android music widgets with controls, artwork, and progress. Fixed wide widget load/art issues and fixed 3-button navigation bottom-bar sizing/mini-player overlap."
+  "notes": "Added lyrics support (synced and unsynced). Added distribution flavors: GitHub/SF keeps first-start update checks while Izzy disables them for policy compliance. Added 2x2 and 4x2 Android music widgets with controls, artwork, and progress. Fixed 3-button navigation bottom-bar sizing/mini-player overlap."
 }
