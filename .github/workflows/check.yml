@@ -2,6 +2,7 @@ name: "Build and Check"
 
 on:
   push:
+    branches: [main]
     paths-ignore:
       - 'README.md'
       - 'LICENSE'
@@ -13,8 +14,20 @@ on:
       - 'fastlane/**'
       - '.github/workflows/pages-ghweb.yml'
       - 'ghweb/**'
-
+  pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - 'CONTRIBUTING.md'
+      - 'CODE_OF_CONDUCT.md'
+      - 'CHANGELOG.md'
+      - 'UPCOMING_FEATURE_UPDATES.md'
+      - 'SECURITY.md'
+      - 'fastlane/**'
+      - '.github/workflows/pages-ghweb.yml'
+      - 'ghweb/**'
 
 jobs:
   build:
