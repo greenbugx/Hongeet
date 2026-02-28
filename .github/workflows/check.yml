@@ -58,13 +58,16 @@ jobs:
             VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
             echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Build APK
-        run: flutter build apk --release --build-number ${{github.run_number}}
+      - name: Build APK (github flavor)
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+        run: flutter build apk --release --flavor github --build-number ${{ github.run_number }}
 
       - name: Rename APK
         run: |
-            mv build/app/outputs/flutter-apk/app-release.apk \
-            build/app/outputs/flutter-apk/Hongeet_v${VERSION}+${{ github.run_number }}.apk
+            APK_PATH=$(find build/app/outputs/flutter-apk -maxdepth 1 -type f -name "app*github*release.apk" ! -name "*armeabi-v7a*" ! -name "*arm64-v8a*" | head -n 1)
+            test -n "$APK_PATH" || (echo "GitHub flavor release APK not found" && ls -la build/app/outputs/flutter-apk && exit 1)
+            mv "$APK_PATH" build/app/outputs/flutter-apk/Hongeet_v${VERSION}+${{ github.run_number }}.apk
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
