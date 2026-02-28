@@ -61,6 +61,18 @@ android {
 
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            resValue("string", "distribution_flavor", "github")
+        }
+        create("izzy") {
+            dimension = "distribution"
+            resValue("string", "distribution_flavor", "izzy")
+        }
+    }
+
     buildTypes {
         getByName("release") {
             if (keystorePropertiesFile.exists()) {
