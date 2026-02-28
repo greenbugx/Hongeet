@@ -75,7 +75,7 @@ Hongeet is a music player that supports **offline local audio playback** and **o
     <tr>
       <td><img src="assets/screenshots/01.jpg" width="220" /></td>
       <td><img src="assets/screenshots/02.jpg" width="220" /></td>
-      <td><img src="assets/screenshots/03.jpg" width="220" /></td>
+      <td><img src="assets/screenshots/11.png" width="220" /></td>
     </tr>
     <tr>
       <td><img src="assets/screenshots/04.jpg" width="220" /></td>
