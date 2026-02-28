@@ -1,48 +1,44 @@
-# 📌 Upcoming Feature Updates – Hongeet
+# Upcoming Feature Updates - Hongeet
 
-This document tracks planned features, improvements, and quality updates for future releases of Hongeet.
+This document tracks planned features and quality improvements for upcoming Hongeet releases.
 
-The roadmap may evolve based on feasibility and user feedback.
-
->[!NOTE]
->_Last updated: 18-02-2026 - 8:47 AM UTC_
+> [!NOTE]
+> Last updated: 28-02-2026 - 08:18 PM IST
 
 ---
 
-## ✨ Planned Feature Additions (Minor Updates)
+## Planned Feature Additions
 
-These updates introduce new functionality and content without breaking existing behavior.]
-
-### 🎵 Home & Discovery
-- [x] Charts section for popular and trending songs
-- [ ] Trending artists showcase
+### Home and Discovery
+- [x] Charts section for popular/trending songs
 - [x] Trending albums showcase
-- [ ] Fallback discovery logic if "Trending Songs (Quick Picks)" becomes empty  
-  → Automatically fill using alternative searches like "New Songs" or similar
+- [ ] Trending artists showcase
+- [ ] Fallback discovery fill if Quick Picks becomes empty
 
-### 🔍 Search Enhancements
-- [ ] Genre suggestions when tapping the search bar
-- [ ] Expanded search results including:
-  - Albums
-  - Artists
-  - Additional matching content
+### Search Enhancements
+- [ ] Genre suggestions on search focus
+- [ ] Expanded search entities (albums, artists, related matches)
 
-### ▶ Playback & Queue Improvements
-- [x] Play directly from albums (queue only songs within the selected album)
-- [ ] Smart queue recommendations based on recently played songs  
-  - Excludes downloaded-only playback (downloaded songs build queue locally)
+### Playback and Queue
+- [x] Album-scoped play flow
+- [x] Stronger queue auto-extend and duplicate filtering
+- [ ] Smarter queue recommendations based on recent listening
 
-### 🎮 Integrations
-- [ ] Discord Rich Presence support (if feasible)
+### Widgets and Integrations
+- [x] Android 2x2 and 4x2 music widgets with controls/progress
+- [ ] Additional widget style presets and theme variants
 
 ---
 
-## ⚡ Performance & Quality Improvements (Patch Updates)
+## Performance and Stability
 
-These updates focus on speed, stability, and user experience.
-
-- [x] Smoother performance on low-end devices
-- [ ] Faster downloads from YTM source (if possible)
-- [ ] General UI and playback optimizations
+- [x] Smoother behavior on low-end devices
+- [x] Improved mini-player/bottom-nav behavior across gesture and 3-button navigation modes
+- [ ] Faster/more resilient downloads on unstable networks
+- [ ] Additional playback/network retry hardening
 
 ---
+
+## Distribution and Release
+
+- [x] Build flavors for distribution policy compliance (`github` and `izzy`)
