@@ -1,6 +1,6 @@
 {
-  "latest": "v1.5.1+16",
-  "min_supported": "v1.5.0+15",
+  "latest": "v1.7.0+18",
+  "min_supported": "v1.6.0+17",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
   "notes": "TEST"
 }
