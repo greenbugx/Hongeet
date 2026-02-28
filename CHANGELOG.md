@@ -1,3 +1,21 @@
+# v1.6.0+17
+
+## Lyrics + Distribution Flavors + Android Widgets
+
+### BUG FIXES / IMPROVEMENTS
+
+- **Lyrics:** Added lyrics support (Synced & Unsynced).
+- **Flavors Added:** Introduced `github` and `izzy` product flavors for distribution-specific behavior.
+- **Manual Updates Kept:** "Check for updates" in Settings remains available for all flavors.
+- **Android Widgets:** Added 2x2 and 4x2 home-screen music widgets with playback controls.
+- **Widget Playback UX:** Added progress support and improved artwork handling for widgets.
+- **Navigation Layout Fix:** Fixed bottom navigation size inconsistency in 3-button mode that caused mini-player overlap/mixing.
+- **Release Pipeline:** Updated CI workflow to publish a separate Izzy arm64-only APK artifact alongside normal flavor outputs.
+
+### UPCOMING (work in progress)
+
+- Better relevance tuning for search and recommendations
+
 # v1.5.1+16
 
 ## Queue Stability + Smooth Mode Performance Tuning

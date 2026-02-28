@@ -87,7 +87,7 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
     final subtitle = widget.chart.subtitle.trim();
     if (subtitle.isEmpty) return '';
     final parts = subtitle
-        .split(RegExp(r'\s*[•\u2022\|]\s*'))
+        .split(RegExp(r'\s*(?:\u2022|\u00b7|\|)\s*'))
         .map((p) => p.trim())
         .where((p) => p.isNotEmpty)
         .toList(growable: false);

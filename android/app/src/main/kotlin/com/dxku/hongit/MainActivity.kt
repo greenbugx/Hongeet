@@ -16,6 +16,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : AudioServiceActivity() {
 
     private val batteryChannel = "battery_optimization"
+    private val distributionChannel = "app_distribution"
 
     companion object {
         private const val TAG = "MainActivity"
@@ -43,6 +44,16 @@ class MainActivity : AudioServiceActivity() {
                     result.success(openBatteryOptimizationSettings())
                 }
 
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            distributionChannel
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "flavor" -> result.success(getString(R.string.distribution_flavor))
                 else -> result.notImplemented()
             }
         }

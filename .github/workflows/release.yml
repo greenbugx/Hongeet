@@ -51,36 +51,60 @@ jobs:
           echo storePassword=${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }} >> android/key.properties
           echo keyAlias=${{ secrets.ANDROID_KEY_ALIAS }} >> android/key.properties
 
-      - name: Build Universal APK
-        run: flutter build apk --release
+      - name: Build GitHub/SF Universal APK
+        run: flutter build apk --release --flavor github
 
-      - name: Build ARM Split APKs
-        run: flutter build apk --release --split-per-abi --target-platform android-arm64,android-arm
+      - name: Build GitHub/SF ARM Split APKs
+        run: flutter build apk --release --flavor github --split-per-abi --target-platform android-arm64,android-arm
+
+      - name: Build Izzy ARM64-only APK
+        run: flutter build apk --release --flavor izzy --split-per-abi --target-platform android-arm64
 
       - name: Verify Sign
         run: |
           BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools | sort -r | head -n 1)
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify build/app/outputs/flutter-apk/app-release.apk
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          APK_DIR=build/app/outputs/flutter-apk
+          for apk in "$APK_DIR"/app*github*release.apk "$APK_DIR"/app*izzy*release.apk; do
+            if [ -f "$apk" ]; then
+              $ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner verify "$apk"
+            fi
+          done
 
       - name: Rename APK files
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk \
-             build/app/outputs/flutter-apk/hongeet_v${VERSION}_universal.apk
-          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
-             build/app/outputs/flutter-apk/hongeet_v${VERSION}_armeabi-v7a.apk
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
-             build/app/outputs/flutter-apk/hongeet_v${VERSION}_arm64-v8a.apk
+          APK_DIR=build/app/outputs/flutter-apk
+
+          GH_UNIVERSAL=$(find "$APK_DIR" -maxdepth 1 -type f -name "app*github*release.apk" ! -name "*armeabi-v7a*" ! -name "*arm64-v8a*" | head -n 1)
+          GH_ARMV7=$(find "$APK_DIR" -maxdepth 1 -type f -name "app*github*release.apk" -name "*armeabi-v7a*" | head -n 1)
+          GH_ARM64=$(find "$APK_DIR" -maxdepth 1 -type f -name "app*github*release.apk" -name "*arm64-v8a*" | head -n 1)
+          IZZY_ARM64=$(find "$APK_DIR" -maxdepth 1 -type f -name "app*izzy*release.apk" -name "*arm64-v8a*" | head -n 1)
+
+          test -n "$GH_UNIVERSAL" || (echo "GitHub universal APK not found" && exit 1)
+          test -n "$GH_ARMV7" || (echo "GitHub armeabi-v7a APK not found" && exit 1)
+          test -n "$GH_ARM64" || (echo "GitHub arm64-v8a APK not found" && exit 1)
+          test -n "$IZZY_ARM64" || (echo "Izzy arm64-v8a APK not found" && exit 1)
+
+          mv "$GH_UNIVERSAL" "$APK_DIR/hongeet_v${VERSION}_universal.apk"
+          mv "$GH_ARMV7" "$APK_DIR/hongeet_v${VERSION}_armeabi-v7a.apk"
+          mv "$GH_ARM64" "$APK_DIR/hongeet_v${VERSION}_arm64-v8a.apk"
+          mv "$IZZY_ARM64" "$APK_DIR/hongeet_v${VERSION}_izzy_arm64-v8a.apk"
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Release
+          name: Release-GH/SF
           path: |
             build/app/outputs/flutter-apk/hongeet_v*_universal.apk
             build/app/outputs/flutter-apk/hongeet_v*_armeabi-v7a.apk
             build/app/outputs/flutter-apk/hongeet_v*_arm64-v8a.apk
+            !build/app/outputs/flutter-apk/hongeet_v*_izzy_arm64-v8a.apk
+
+      - name: Upload Izzy Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release-Izzy
+          path: |
+            build/app/outputs/flutter-apk/hongeet_v*_izzy_arm64-v8a.apk
       
       # - name: Create GitHub Release
       #   uses: ncipollo/release-action@v1

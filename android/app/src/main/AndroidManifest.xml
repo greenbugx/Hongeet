@@ -49,6 +49,36 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <receiver
+            android:name=".widget.SquareMusicWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.dxku.hongit.widget.ACTION_PREVIOUS" />
+                <action android:name="com.dxku.hongit.widget.ACTION_TOGGLE_PLAYBACK" />
+                <action android:name="com.dxku.hongit.widget.ACTION_NEXT" />
+                <action android:name="com.dxku.hongit.widget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/music_widget_square_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WideMusicWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.dxku.hongit.widget.ACTION_PREVIOUS" />
+                <action android:name="com.dxku.hongit.widget.ACTION_TOGGLE_PLAYBACK" />
+                <action android:name="com.dxku.hongit.widget.ACTION_NEXT" />
+                <action android:name="com.dxku.hongit.widget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/music_widget_wide_info" />
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

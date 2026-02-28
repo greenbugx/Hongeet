@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/app_distribution.dart';
+import '../../core/utils/app_update_service.dart';
 import '../library/library_screen.dart';
 import '../search/search_screen.dart';
 import '../settings/settings_screen.dart';
@@ -16,6 +18,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const _startupUpdateCheckDoneKey = 'startup_update_check_done_v1';
+
   int _index = 0;
   int _searchScreenVersion = 0;
 
@@ -26,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadStreamingPrefs();
+    _runStartupUpdateCheckIfNeeded();
   }
 
   Future<void> _loadStreamingPrefs() async {
@@ -35,6 +40,29 @@ class _HomeScreenState extends State<HomeScreen> {
       _useYoutube = prefs.getBool('use_youtube_service') ?? false;
       _useSaavn = prefs.getBool('use_saavn_service') ?? false;
     });
+  }
+
+  Future<void> _runStartupUpdateCheckIfNeeded() async {
+    final enabled = await AppDistribution.isStartupUpdateCheckEnabled();
+    if (!enabled) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyChecked = prefs.getBool(_startupUpdateCheckDoneKey) ?? false;
+    if (alreadyChecked) return;
+
+    await prefs.setBool(_startupUpdateCheckDoneKey, true);
+
+    try {
+      final result = await AppUpdateService().checkForUpdates();
+      if (!mounted || !result.hasUpdate) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showUpdateDialog(context, result);
+      });
+    } catch (_) {
+      // Ignore startup update-check errors to avoid interrupting app launch.
+    }
   }
 
   void _onMusicServiceChanged(bool _) {
@@ -48,16 +76,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     const navBottomPadding = 12.0;
+    final isButtonNavigation = bottomInset >= 24.0;
     final samsungSafeBaseGap = (12.0 - (bottomInset * 0.2))
         .clamp(4.0, 12.0)
         .toDouble();
-    final nonSamsungLiftBoost = bottomInset >= 20.0 ? 0.0 : 10.0;
-    final samsungDownAdjust = bottomInset >= 20.0 ? -2.0 : 0.0;
-    final miniGapAboveNav =
+    final nonSamsungLiftBoost = isButtonNavigation ? 0.0 : 10.0;
+    final samsungDownAdjust = isButtonNavigation ? -2.0 : 0.0;
+    final adaptiveGap =
         (samsungSafeBaseGap + nonSamsungLiftBoost + samsungDownAdjust)
-            .clamp(3.0, 24.0)
+            .clamp(8.0, 24.0)
             .toDouble();
+    final miniGapAboveNav = isButtonNavigation ? 16.0 : adaptiveGap;
     final miniPlayerBottom =
         bottomInset +
         navBottomPadding +
@@ -88,12 +119,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: miniPlayerBottom,
-            child: const MiniPlayer(),
-          ),
+          if (keyboardHeight == 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: miniPlayerBottom,
+              child: const MiniPlayer(),
+            ),
         ],
       ),
       bottomNavigationBar: Padding(
@@ -102,41 +134,45 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(24),
           child: Container(
             color: Colors.white.withValues(alpha: 0.08),
-            child: BottomNavigationBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              currentIndex: displayIndex,
-              onTap: (i) {
-                if (i == displayIndex) return;
-                setState(() => _index = i);
-              },
-              items: [
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.search
-                        : Icons.search,
+            child: MediaQuery.removePadding(
+              context: context,
+              removeBottom: true,
+              child: BottomNavigationBar(
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                currentIndex: displayIndex,
+                onTap: (i) {
+                  if (i == displayIndex) return;
+                  setState(() => _index = i);
+                },
+                items: [
+                  BottomNavigationBarItem(
+                    icon: Icon(
+                      themeProvider.useGlassTheme
+                          ? CupertinoIcons.search
+                          : Icons.search,
+                    ),
+                    label: 'Search',
                   ),
-                  label: 'Search',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.music_albums
-                        : Icons.library_music,
-                    color: isLocalMode ? Colors.white24 : null,
+                  BottomNavigationBarItem(
+                    icon: Icon(
+                      themeProvider.useGlassTheme
+                          ? CupertinoIcons.music_albums
+                          : Icons.library_music,
+                      color: isLocalMode ? Colors.white24 : null,
+                    ),
+                    label: 'Library',
                   ),
-                  label: 'Library',
-                ),
-                BottomNavigationBarItem(
-                  icon: Icon(
-                    themeProvider.useGlassTheme
-                        ? CupertinoIcons.settings
-                        : Icons.settings,
+                  BottomNavigationBarItem(
+                    icon: Icon(
+                      themeProvider.useGlassTheme
+                          ? CupertinoIcons.settings
+                          : Icons.settings,
+                    ),
+                    label: 'Settings',
                   ),
-                  label: 'Settings',
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

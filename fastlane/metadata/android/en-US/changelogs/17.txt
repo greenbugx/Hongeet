@@ -1,0 +1,6 @@
+v1.6.0+17
+- Added lyrics support (synced and unsynced).
+- Added flavors: github (startup auto-update check) and izzy (no startup auto-check).
+- Added Android widgets (2x2, 4x2) with controls, artwork, and progress.
+- Fixed 3-button mode bottom-nav height causing mini-player overlap.
+- CI now publishes a separate izzy arm64-only APK artifact.

@@ -1,6 +1,6 @@
 {
-  "latest": "v1.5.1+16",
-  "min_supported": "v1.5.0+15",
+  "latest": "v1.6.0+17",
+  "min_supported": "v1.5.1+16",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
-  "notes": "Queue extension is now more stable with stricter duplicate/noisy-track filtering, dynamic YT continuation no longer falls back to unrelated sources, playlist-create crashes were fixed, and smooth-mode rendering/input performance was tuned for low-end devices."
+  "notes": "Added lyrics support (synced and unsynced). Added distribution flavors: GitHub/SF keeps first-start update checks while Izzy disables them for policy compliance. Added 2x2 and 4x2 Android music widgets with controls, artwork, and progress. Fixed 3-button navigation bottom-bar sizing/mini-player overlap."
 }

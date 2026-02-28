@@ -61,6 +61,18 @@ android {
 
     }
 
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("github") {
+            dimension = "distribution"
+            resValue("string", "distribution_flavor", "github")
+        }
+        create("izzy") {
+            dimension = "distribution"
+            resValue("string", "distribution_flavor", "izzy")
+        }
+    }
+
     buildTypes {
         getByName("release") {
             if (keystorePropertiesFile.exists()) {
@@ -104,6 +116,7 @@ android {
 dependencies {
     implementation("org.nanohttpd:nanohttpd:2.3.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.media:media:1.7.0")
 }
 
 flutter {

@@ -26,15 +26,27 @@ class DownloadedSongsProvider {
     final dir = Directory('/storage/emulated/0/Download/Hongeet');
 
     if (!await dir.exists()) return [];
+    try {
+      final files = <File>[];
+      await for (final entity in dir.list(
+        recursive: false,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        final ext = p.extension(entity.path).toLowerCase();
+        if (!['.mp3', '.m4a', '.webm'].contains(ext)) continue;
+        files.add(entity);
+      }
 
-    final files = dir.listSync().whereType<File>().where((f) {
-      final ext = p.extension(f.path).toLowerCase();
-      return ['.mp3', '.m4a', '.webm'].contains(ext);
-    }).toList();
-
-    return files
-        .map((f) => DownloadedSong(f.path, p.basenameWithoutExtension(f.path)))
-        .toList();
+      return files
+          .map(
+            (f) => DownloadedSong(f.path, p.basenameWithoutExtension(f.path)),
+          )
+          .toList(growable: false);
+    } catch (e) {
+      AppLogger.warning('Failed to load downloaded songs: $e', error: e);
+      return [];
+    }
   }
 
   static Future<void> delete(String path) async {
