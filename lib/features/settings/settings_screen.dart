@@ -1,13 +1,12 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hongit/features/settings/about_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/glass_container.dart';
+import '../../core/utils/themed_container.dart';
 import '../../core/utils/streaming_preferences.dart';
-import '../../core/utils/glass_page.dart';
+import '../../core/utils/themed_page.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/app_update_service.dart';
 import '../../core/utils/battery_optimization_handler.dart';
@@ -32,6 +31,17 @@ class _SettingsScreenState extends State<SettingsScreen>
   static const _remindAfterDays = 5;
   static const _lastPromptKey = 'battery_prompt_time';
   static const _firstSeenKey = 'battery_first_seen';
+
+  static const List<Color> _presetThemeColors = <Color>[
+    Color(0xFF28C76F),
+    Color(0xFF00BFA6),
+    Color(0xFF1E88E5),
+    Color(0xFF3F51B5),
+    Color(0xFF8E24AA),
+    Color(0xFFD81B60),
+    Color(0xFFFB8C00),
+    Color(0xFFFDD835),
+  ];
 
   @override
   void initState() {
@@ -115,11 +125,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _setYoutubeServicePreference(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    // When enabling YouTube, ensure Saavn is disabled to keep services mutually exclusive.
     await prefs.setBool('use_youtube_service', enabled);
     if (enabled) {
       await prefs.setBool('use_saavn_service', false);
-      // If in local mode and enabling YouTube, switch to YTM mode
       final currentMode = prefs.getString('app_mode');
       if (currentMode == 'local') {
         await prefs.setString('app_mode', 'ytm');
@@ -136,11 +144,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   Future<void> _setSaavnServicePreference(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
-    // When enabling Saavn, ensure YTM is disabled to keep services mutually exclusive
     await prefs.setBool('use_saavn_service', enabled);
     if (enabled) {
       await prefs.setBool('use_youtube_service', false);
-      // If in local mode and enabling Saavn, switch to Saavn mode
       final currentMode = prefs.getString('app_mode');
       if (currentMode == 'local') {
         await prefs.setString('app_mode', 'saavn');
@@ -197,18 +203,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     Future<void>.delayed(const Duration(milliseconds: 600), _checkBattery);
   }
 
-  bool _canUseGlassTheme(BuildContext context) {
-    return !ThemeProvider.isLowEndLikely(context);
-  }
-
   String _progressBarStyleLabel(ProgressBarStyle style) {
     switch (style) {
       case ProgressBarStyle.defaultStyle:
         return 'Default';
       case ProgressBarStyle.snake:
         return 'Snake';
-      case ProgressBarStyle.glass:
-        return 'Glass';
     }
   }
 
@@ -218,8 +218,6 @@ class _SettingsScreenState extends State<SettingsScreen>
         return 'Standard seek bar';
       case ProgressBarStyle.snake:
         return 'Curved static track with moving head';
-      case ProgressBarStyle.glass:
-        return 'Glass-styled seek bar';
     }
   }
 
@@ -235,10 +233,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   String _uiPerformanceHint(ThemeProvider themeProvider, BuildContext context) {
-    if (themeProvider.useGlassTheme) {
-      return 'This setting makes no change when Glass Theme is enabled.';
-    }
-
     final resolved = themeProvider.resolvedUiPerformanceMode(context);
     switch (themeProvider.uiPerformanceMode) {
       case UiPerformanceMode.auto:
@@ -248,13 +242,6 @@ class _SettingsScreenState extends State<SettingsScreen>
       case UiPerformanceMode.full:
         return 'Best visual quality and motion';
     }
-  }
-
-  List<ProgressBarStyle> _availableProgressStyles(ThemeProvider themeProvider) {
-    if (themeProvider.useGlassTheme) {
-      return ProgressBarStyle.values;
-    }
-    return const [ProgressBarStyle.defaultStyle, ProgressBarStyle.snake];
   }
 
   String _dataSaverDescription(bool enabled) {
@@ -286,24 +273,198 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
   }
 
+  Future<void> _showColorPickerDialog(ThemeProvider themeProvider) async {
+    int red = themeProvider.seedColor.r.toInt();
+    int green = themeProvider.seedColor.g.toInt();
+    int blue = themeProvider.seedColor.b.toInt();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            final preview = Color.fromARGB(255, red, green, blue);
+
+            Widget buildSlider({
+              required String label,
+              required int value,
+              required ValueChanged<double> onChanged,
+              required Color activeColor,
+            }) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$label: $value'),
+                  Slider(
+                    min: 0,
+                    max: 255,
+                    value: value.toDouble(),
+                    activeColor: activeColor,
+                    onChanged: onChanged,
+                  ),
+                ],
+              );
+            }
+
+            return AlertDialog(
+              title: const Text('Custom Theme Color'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: preview,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    buildSlider(
+                      label: 'Red',
+                      value: red,
+                      activeColor: Colors.red,
+                      onChanged: (v) =>
+                          setStateDialog(() => red = v.round().clamp(0, 255)),
+                    ),
+                    buildSlider(
+                      label: 'Green',
+                      value: green,
+                      activeColor: Colors.green,
+                      onChanged: (v) =>
+                          setStateDialog(() => green = v.round().clamp(0, 255)),
+                    ),
+                    buildSlider(
+                      label: 'Blue',
+                      value: blue,
+                      activeColor: Colors.blue,
+                      onChanged: (v) =>
+                          setStateDialog(() => blue = v.round().clamp(0, 255)),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    await themeProvider.setSeedColor(preview);
+                    if (!dialogContext.mounted) return;
+                    Navigator.pop(dialogContext);
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildThemeColorSection(
+    BuildContext context,
+    ThemeProvider themeProvider,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = themeProvider.seedColor.toARGB32();
+
+    return ThemedContainer(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.palette_outlined, color: scheme.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Theme color',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: themeProvider.seedColor,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: scheme.outlineVariant.withValues(alpha: 0.65),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _presetThemeColors.map((color) {
+                final isSelected = color.toARGB32() == selected;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: () => themeProvider.setSeedColor(color),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: isSelected ? 38 : 34,
+                    height: isSelected ? 38 : 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
+                      border: Border.all(
+                        color: isSelected
+                            ? scheme.onSurface
+                            : scheme.outlineVariant.withValues(alpha: 0.55),
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _showColorPickerDialog(themeProvider),
+              icon: const Icon(Icons.tune),
+              label: const Text('Custom color'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final canUseGlassTheme = _canUseGlassTheme(context);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
 
-    return GlassPage(
+    return ThemedPage(
       child: ListView(
         children: [
-          const Text(
+          Text(
             'Settings',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 20),
 
           if (showBatteryWarning) ...[
-            GlassContainer(
+            ThemedContainer(
               child: ListTile(
-                leading: const Icon(Icons.battery_alert, color: Colors.orange),
+                leading: Icon(Icons.battery_alert, color: scheme.tertiary),
                 title: const Text('Background playback may stop'),
                 subtitle: Text(
                   '$manufacturer devices aggressively limit background apps. '
@@ -318,13 +479,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             const SizedBox(height: 20),
           ],
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
-              leading: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.arrow_down_circle
-                    : Icons.system_update_alt,
-              ),
+              leading: const Icon(Icons.system_update_alt),
               title: const Text('Check for updates'),
               subtitle: const Text('Check latest version and update now'),
               onTap: _checkForUpdatesManually,
@@ -333,57 +490,24 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
-            child: SwitchListTile(
-              value: themeProvider.useGlassTheme,
-              onChanged: (enabled) {
-                if (enabled && !canUseGlassTheme) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Glass theme may feel laggy on this device.',
-                      ),
-                    ),
-                  );
-                }
-                themeProvider.setUseGlassTheme(enabled);
-              },
-              secondary: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.settings
-                    : Icons.blur_on,
-              ),
-              title: const Text('Glass UI Theme'),
-              subtitle: Text(
-                canUseGlassTheme
-                    ? 'Use iOS 26 glass UI Theme.'
-                    : 'May lag on low-end devices.',
-              ),
-            ),
-          ),
+          _buildThemeColorSection(context, themeProvider),
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
-              leading: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.speedometer
-                    : Icons.speed,
-              ),
+              leading: const Icon(Icons.speed),
               title: const Text('UI performance'),
               subtitle: Text(_uiPerformanceHint(themeProvider, context)),
               trailing: DropdownButtonHideUnderline(
                 child: DropdownButton<UiPerformanceMode>(
                   value: themeProvider.uiPerformanceMode,
                   isDense: true,
-                  onChanged: themeProvider.useGlassTheme
-                      ? null
-                      : (mode) {
-                          if (mode != null) {
-                            themeProvider.setUiPerformanceMode(mode);
-                          }
-                        },
+                  onChanged: (mode) {
+                    if (mode != null) {
+                      themeProvider.setUiPerformanceMode(mode);
+                    }
+                  },
                   items: UiPerformanceMode.values
                       .map(
                         (mode) => DropdownMenuItem<UiPerformanceMode>(
@@ -399,13 +523,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
-              leading: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.waveform_path_ecg
-                    : Icons.multitrack_audio,
-              ),
+              leading: const Icon(Icons.multitrack_audio),
               title: const Text('Progress bar style'),
               subtitle: Text(
                 _progressBarStyleHint(themeProvider.effectiveProgressBarStyle),
@@ -419,7 +539,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       themeProvider.setProgressBarStyle(style);
                     }
                   },
-                  items: _availableProgressStyles(themeProvider)
+                  items: ProgressBarStyle.values
                       .map(
                         (style) => DropdownMenuItem<ProgressBarStyle>(
                           value: style,
@@ -434,17 +554,13 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: SwitchListTile(
               value: themeProvider.dataSaverEnabled,
               onChanged: (enabled) {
                 themeProvider.setDataSaverEnabled(enabled);
               },
-              secondary: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.antenna_radiowaves_left_right
-                    : Icons.data_saver_on,
-              ),
+              secondary: const Icon(Icons.data_saver_on),
               title: const Text('Data Saver'),
               subtitle: Text(
                 _dataSaverDescription(themeProvider.dataSaverEnabled),
@@ -454,17 +570,13 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: SwitchListTile(
               value: _useSaavnService,
               onChanged: (v) {
                 _setSaavnServicePreference(v);
               },
-              secondary: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.music_albums
-                    : Icons.library_music,
-              ),
+              secondary: const Icon(Icons.library_music),
               title: const Text('Saavn Service'),
               subtitle: const Text('Use Saavn as the music Service'),
             ),
@@ -472,17 +584,13 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: SwitchListTile(
               value: _useYoutubeService,
               onChanged: (v) {
                 _setYoutubeServicePreference(v);
               },
-              secondary: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.play_circle
-                    : Icons.smart_display,
-              ),
+              secondary: const Icon(Icons.smart_display),
               title: const Text('Youtube Service'),
               subtitle: const Text('Use Youtube as the music Service'),
             ),
@@ -490,7 +598,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
               leading: const Icon(Icons.cached),
               title: const Text('Clear stream cache'),
@@ -514,7 +622,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
               leading: const Icon(Icons.history),
               title: const Text('Clear recently played'),
@@ -531,20 +639,12 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
-              leading: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.info_circle
-                    : Icons.info_outline,
-              ),
+              leading: const Icon(Icons.info_outline),
               title: const Text('About'),
               subtitle: const Text('Version, license'),
-              trailing: Icon(
-                themeProvider.useGlassTheme
-                    ? CupertinoIcons.right_chevron
-                    : Icons.chevron_right,
-              ),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 Navigator.push(
                   context,

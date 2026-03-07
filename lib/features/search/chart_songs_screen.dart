@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/responsive.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/app_messenger.dart';
-import '../../core/utils/glass_container.dart';
-import '../../core/utils/glass_page.dart';
+import '../../core/utils/themed_container.dart';
+import '../../core/utils/themed_page.dart';
 import '../../core/utils/youtube_thumbnail_utils.dart';
 import '../../core/widgets/fallback_network_image.dart';
 import '../../data/api/youtube_api.dart';
@@ -17,11 +18,13 @@ import '../player/mini_player.dart';
 class ChartSongsScreen extends StatefulWidget {
   final YtmChart chart;
   final String headerTitle;
+  final String? fallbackArtistName;
 
   const ChartSongsScreen({
     super.key,
     required this.chart,
     this.headerTitle = 'Charts',
+    this.fallbackArtistName,
   });
 
   @override
@@ -84,6 +87,11 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
   }
 
   String _fallbackArtistFromChartSubtitle() {
+    final explicit = widget.fallbackArtistName?.trim() ?? '';
+    if (explicit.isNotEmpty && !_isUnknownArtistValue(explicit)) {
+      return explicit;
+    }
+
     final subtitle = widget.chart.subtitle.trim();
     if (subtitle.isEmpty) return '';
     final parts = subtitle
@@ -290,11 +298,12 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
   }
 
   Future<void> _toggleFavourite(SaavnSong song) async {
+    final scheme = Theme.of(context).colorScheme;
     final wasFavourite = PlaylistManager.isFavourite(song.id);
     await PlaylistManager.toggleFavourite(_songAsPlaylistEntry(song));
     AppMessenger.show(
       wasFavourite ? 'Removed from favorites' : 'Added to favorites',
-      color: wasFavourite ? Colors.orange.shade700 : Colors.green.shade700,
+      color: wasFavourite ? scheme.secondary : scheme.primary,
     );
     if (mounted) setState(() {});
   }
@@ -304,11 +313,15 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
       context,
       listen: false,
     ).useGlassTheme;
+    final uiTheme = Theme.of(context);
+    final scheme = uiTheme.colorScheme;
+    final textTheme = uiTheme.textTheme;
     final addedInSheet = <String>{};
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black.withValues(alpha: 0.85),
+      useSafeArea: true,
+      backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -330,18 +343,17 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text(
+                      Text(
                         'Add to Playlist',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                        style: textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 12),
                       if (names.isEmpty)
-                        const Text(
+                        Text(
                           'No playlists yet',
-                          style: TextStyle(color: Colors.white54),
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       ...names.map((name) {
                         final playlistSongs = playlists[name] ?? const [];
@@ -356,15 +368,12 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                             added
                                 ? _addedToPlaylistIcon(useGlassTheme)
                                 : _playlistIcon(useGlassTheme),
-                            color: added ? Colors.green.shade400 : null,
+                            color: added ? scheme.primary : null,
                           ),
                           title: Text(name),
                           onTap: () async {
                             if (added) {
-                              AppMessenger.show(
-                                'Already in "$name"',
-                                color: Colors.orange.shade700,
-                              );
+                              AppMessenger.show('Already in "$name"');
                               return;
                             }
 
@@ -376,15 +385,9 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
 
                             if (success) {
                               setModalState(() => addedInSheet.add(name));
-                              AppMessenger.show(
-                                'Added to "$name"',
-                                color: Colors.green.shade700,
-                              );
+                              AppMessenger.show('Added to "$name"');
                             } else {
-                              AppMessenger.show(
-                                'Already in "$name"',
-                                color: Colors.orange.shade700,
-                              );
+                              AppMessenger.show('Already in "$name"');
                             }
                           },
                         );
@@ -403,11 +406,16 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Provider.of<ThemeProvider>(context);
+    final uiTheme = Theme.of(context);
+    final textTheme = uiTheme.textTheme;
+    final scheme = uiTheme.colorScheme;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final headerArtSize = screenWidth >= 1024 ? 280.0 : 210.0;
     final artCandidates = YoutubeThumbnailUtils.candidateUrls(
       imageUrl: widget.chart.imageUrl,
     );
 
-    return GlassPage(
+    return ThemedPage(
       child: Stack(
         children: [
           RefreshIndicator(
@@ -452,9 +460,8 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                         const SizedBox(width: 6),
                         Text(
                           widget.headerTitle,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
+                          style: textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -472,16 +479,16 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                             borderRadius: BorderRadius.circular(20),
                             child: FallbackNetworkImage(
                               urls: artCandidates,
-                              width: 210,
-                              height: 210,
+                              width: headerArtSize,
+                              height: headerArtSize,
                               cacheWidth: 1024,
                               cacheHeight: 1024,
                               fit: BoxFit.cover,
                               filterQuality: FilterQuality.medium,
                               fallback: Container(
-                                width: 210,
-                                height: 210,
-                                color: Colors.black26,
+                                width: headerArtSize,
+                                height: headerArtSize,
+                                color: scheme.surfaceContainerHighest,
                                 child: Icon(
                                   _chartFallbackIcon(theme.useGlassTheme),
                                   size: 48,
@@ -495,9 +502,8 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
+                            style: textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -506,19 +512,17 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 15,
+                            style: textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w500,
-                              color: Colors.white70,
+                              color: scheme.onSurfaceVariant,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
                             '$resolvedSongCount songs',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white60,
+                            style: textTheme.labelMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -533,9 +537,8 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                             _enhanceTargetCount > 0
                                 ? 'Fetching songs arts... $_enhancedCount/$_enhanceTargetCount'
                                 : 'Fetching songs arts...',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.white60,
+                            style: textTheme.labelMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -552,9 +555,11 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
+                              Text(
                                 'Failed to load chart songs',
-                                style: TextStyle(color: Colors.white70),
+                                style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                ),
                               ),
                               const SizedBox(height: 10),
                               OutlinedButton(
@@ -566,12 +571,12 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                         ),
                       )
                     else if (songs.isEmpty)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.symmetric(vertical: 36),
                         child: Center(
                           child: Text(
                             'No songs found in this chart',
-                            style: TextStyle(color: Colors.white60),
+                            style: TextStyle(color: scheme.onSurfaceVariant),
                           ),
                         ),
                       )
@@ -601,7 +606,7 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
 
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 10),
-                          child: GlassContainer(
+                          child: ThemedContainer(
                             child: ListTile(
                               leading: SizedBox(
                                 width: 50,
@@ -619,7 +624,7 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                                       fit: BoxFit.cover,
                                       filterQuality: FilterQuality.medium,
                                       fallback: Container(
-                                        color: Colors.black26,
+                                        color: scheme.surfaceContainerHighest,
                                         child: Icon(
                                           _songFallbackIcon(
                                             theme.useGlassTheme,
@@ -662,7 +667,7 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
                                         ),
                                         color:
                                             PlaylistManager.isFavourite(song.id)
-                                            ? Colors.redAccent
+                                            ? scheme.error
                                             : null,
                                       ),
                                       onPressed: () => _toggleFavourite(song),
@@ -694,7 +699,22 @@ class _ChartSongsScreenState extends State<ChartSongsScreen> {
               },
             ),
           ),
-          const Positioned(left: 0, right: 0, bottom: 0, child: MiniPlayer()),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: ResponsiveLayout.isExpanded(context)
+                      ? 760
+                      : double.infinity,
+                ),
+                child: const MiniPlayer(),
+              ),
+            ),
+          ),
         ],
       ),
     );

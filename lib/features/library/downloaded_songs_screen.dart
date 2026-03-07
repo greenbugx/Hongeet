@@ -6,10 +6,11 @@ import 'package:marquee/marquee.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/responsive.dart';
 import '../../core/utils/app_messenger.dart';
 import '../../core/utils/audio_player_service.dart';
-import '../../core/utils/glass_container.dart';
-import '../../core/utils/glass_page.dart';
+import '../../core/utils/themed_container.dart';
+import '../../core/utils/themed_page.dart';
 import '../player/mini_player.dart';
 import 'downloaded_songs_provider.dart';
 
@@ -60,9 +61,9 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
+            child: Text(
               'Delete',
-              style: TextStyle(color: Colors.redAccent),
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
             ),
           ),
         ],
@@ -90,10 +91,11 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
   }
 
   Widget _emptyState(String text) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Center(
-        child: Text(text, style: const TextStyle(color: Colors.white54)),
+        child: Text(text, style: TextStyle(color: scheme.onSurfaceVariant)),
       ),
     );
   }
@@ -141,8 +143,9 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final player = AudioPlayerService();
+    final textTheme = Theme.of(context).textTheme;
 
-    return GlassPage(
+    return ThemedPage(
       child: Stack(
         children: [
           RefreshIndicator(
@@ -162,12 +165,11 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Downloaded Songs',
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w600,
+                        style: textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -192,7 +194,7 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
                         final song = entry.value;
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 12),
-                          child: GlassContainer(
+                          child: ThemedContainer(
                             child: ListTile(
                               leading: Icon(
                                 themeProvider.useGlassTheme
@@ -228,7 +230,22 @@ class _DownloadedSongsScreenState extends State<DownloadedSongsScreen> {
               ],
             ),
           ),
-          const Positioned(left: 0, right: 0, bottom: 0, child: MiniPlayer()),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: ResponsiveLayout.isExpanded(context)
+                      ? 760
+                      : double.infinity,
+                ),
+                child: const MiniPlayer(),
+              ),
+            ),
+          ),
         ],
       ),
     );

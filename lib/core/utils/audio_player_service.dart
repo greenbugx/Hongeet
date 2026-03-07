@@ -119,7 +119,7 @@ class AudioPlayerService {
     'Accept': '*/*',
     'Accept-Language': 'en-US,en;q=0.9',
   };
-  static const Duration _loadWatchdogTimeout = Duration(seconds: 26);
+  static const Duration _loadWatchdogTimeout = Duration(seconds: 15);
   static const int _upNextTargetCount = 10;
 
   Future<_ResolvedStream> _resolveUrl(String id) async {
@@ -239,14 +239,28 @@ class AudioPlayerService {
     }
   }
 
-  void _showAutoSkipNotice() {
+  void _showAutoSkipNotice({String? reason}) {
     final now = DateTime.now();
     final last = _lastAutoSkipNoticeAt;
     if (last != null && now.difference(last) < const Duration(seconds: 2)) {
       return;
     }
     _lastAutoSkipNoticeAt = now;
-    AppMessenger.show('Skipping song: server/load error');
+
+    String message;
+    if (reason != null && reason.toLowerCase().contains('403')) {
+      message = 'Skipping: YouTube rate limited (403)';
+    } else if (reason != null && reason.toLowerCase().contains('timeout')) {
+      message = 'Skipping: Connection timeout';
+    } else if (reason != null && reason.toLowerCase().contains('network')) {
+      message = 'Skipping: Network error';
+    } else if (reason != null && reason.toLowerCase().contains('watchdog')) {
+      message = 'Skipping: Load timeout';
+    } else {
+      message = 'Skipping song: server/load error';
+    }
+
+    AppMessenger.show(message);
   }
 
   void setSleepTimer(Duration duration) {
@@ -422,7 +436,7 @@ class AudioPlayerService {
     if (retried || token != _playToken) return;
 
     if (_currentIndex + 1 < _queue.length) {
-      _showAutoSkipNotice();
+      _showAutoSkipNotice(reason: 'watchdog timeout');
       await Future.delayed(const Duration(milliseconds: 500));
       await skipNext();
     }
@@ -437,7 +451,7 @@ class AudioPlayerService {
     if (!_isTransientLoadError(errorText)) return false;
 
     final attempts = (_transientRetryCount[song.id] ?? 0) + 1;
-    const maxAttempts = 2;
+    const maxAttempts = 3;
     if (attempts > maxAttempts) {
       _transientRetryCount.remove(song.id);
       return false;
@@ -558,7 +572,7 @@ class AudioPlayerService {
         _transientRetryCount.remove(song.id);
         AppLogger.warning('YouTube 403 persists after retries, skipping track');
         if (_currentIndex + 1 < _queue.length) {
-          _showAutoSkipNotice();
+          _showAutoSkipNotice(reason: '403');
           await Future.delayed(const Duration(milliseconds: 500));
           await skipNext();
         }

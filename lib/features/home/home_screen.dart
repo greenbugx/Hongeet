@@ -1,8 +1,6 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/theme/responsive.dart';
 import '../../core/utils/app_distribution.dart';
 import '../../core/utils/app_update_service.dart';
 import '../library/library_screen.dart';
@@ -72,28 +70,133 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _onDestinationSelected(int nextIndex, {required bool isLocalMode}) {
+    if (nextIndex == _index) return;
+    if (nextIndex == 1 && isLocalMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enable Saavn or YouTube in Settings to use Library'),
+        ),
+      );
+      return;
+    }
+    setState(() => _index = nextIndex);
+  }
+
+  String _labelForIndex(int index) {
+    switch (index) {
+      case 0:
+        return 'Search';
+      case 1:
+        return 'Library';
+      default:
+        return 'Settings';
+    }
+  }
+
+  IconData _iconForIndex(int index, {required bool selected}) {
+    switch (index) {
+      case 0:
+        return selected ? Icons.search : Icons.search_outlined;
+      case 1:
+        return selected ? Icons.library_music : Icons.library_music_outlined;
+      default:
+        return selected ? Icons.settings : Icons.settings_outlined;
+    }
+  }
+
+  Widget _buildQuickTabSwitcher({
+    required BuildContext context,
+    required int displayIndex,
+    required bool isLocalMode,
+    required double top,
+    required double bottom,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget buildQuickIcon(int index) {
+      final selected = index == displayIndex;
+      final disabled = index == 1 && isLocalMode;
+      final icon = _iconForIndex(index, selected: selected);
+      final iconColor = disabled
+          ? scheme.onSurface.withValues(alpha: 0.35)
+          : selected
+          ? scheme.onSecondaryContainer
+          : scheme.onSurfaceVariant;
+
+      return Tooltip(
+        message: _labelForIndex(index),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: disabled
+                ? null
+                : () => _onDestinationSelected(index, isLocalMode: isLocalMode),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: selected
+                    ? scheme.secondaryContainer.withValues(alpha: 0.95)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, size: 22, color: iconColor),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Positioned(
+      top: top,
+      right: 8,
+      bottom: bottom,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Material(
+          color: scheme.surfaceContainerHighest.withValues(alpha: 0.9),
+          elevation: 4,
+          shadowColor: scheme.shadow.withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(18),
+          child: Container(
+            width: 50,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: scheme.outlineVariant.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                buildQuickIcon(0),
+                const SizedBox(height: 16),
+                buildQuickIcon(1),
+                const SizedBox(height: 16),
+                buildQuickIcon(2),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
-    const navBottomPadding = 12.0;
-    final isButtonNavigation = bottomInset >= 24.0;
-    final samsungSafeBaseGap = (12.0 - (bottomInset * 0.2))
-        .clamp(4.0, 12.0)
-        .toDouble();
-    final nonSamsungLiftBoost = isButtonNavigation ? 0.0 : 10.0;
-    final samsungDownAdjust = isButtonNavigation ? -2.0 : 0.0;
-    final adaptiveGap =
-        (samsungSafeBaseGap + nonSamsungLiftBoost + samsungDownAdjust)
-            .clamp(8.0, 24.0)
-            .toDouble();
-    final miniGapAboveNav = isButtonNavigation ? 16.0 : adaptiveGap;
-    final miniPlayerBottom =
-        bottomInset +
-        navBottomPadding +
-        kBottomNavigationBarHeight +
-        miniGapAboveNav;
+    final media = MediaQuery.of(context);
+    final bottomInset = media.viewPadding.bottom;
+    final keyboardHeight = media.viewInsets.bottom;
+    final quickSwitcherTop = media.padding.top + 90;
+    final quickSwitcherBottom = keyboardHeight == 0
+        ? (108 + bottomInset)
+        : 24.0;
+    final miniPlayerBottom = 12 + bottomInset;
 
     final isLocalMode = !_useYoutube && !_useSaavn;
 
@@ -106,76 +209,47 @@ class _HomeScreenState extends State<HomeScreen> {
     int displayIndex = _index;
     if (displayIndex >= tabs.length) displayIndex = 0;
 
-    return Scaffold(
-      extendBody: true,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: displayIndex,
-            children: List<Widget>.generate(
-              tabs.length,
-              (i) => RepaintBoundary(
-                child: TickerMode(enabled: i == displayIndex, child: tabs[i]),
-              ),
-            ),
-          ),
-          if (keyboardHeight == 0)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: miniPlayerBottom,
-              child: const MiniPlayer(),
-            ),
-        ],
-      ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.fromLTRB(12, 0, 12, navBottomPadding + bottomInset),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            color: Colors.white.withValues(alpha: 0.08),
-            child: MediaQuery.removePadding(
-              context: context,
-              removeBottom: true,
-              child: BottomNavigationBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                currentIndex: displayIndex,
-                onTap: (i) {
-                  if (i == displayIndex) return;
-                  setState(() => _index = i);
-                },
-                items: [
-                  BottomNavigationBarItem(
-                    icon: Icon(
-                      themeProvider.useGlassTheme
-                          ? CupertinoIcons.search
-                          : Icons.search,
-                    ),
-                    label: 'Search',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(
-                      themeProvider.useGlassTheme
-                          ? CupertinoIcons.music_albums
-                          : Icons.library_music,
-                      color: isLocalMode ? Colors.white24 : null,
-                    ),
-                    label: 'Library',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(
-                      themeProvider.useGlassTheme
-                          ? CupertinoIcons.settings
-                          : Icons.settings,
-                    ),
-                    label: 'Settings',
-                  ),
-                ],
-              ),
-            ),
+    Widget buildIndexedContent() {
+      return IndexedStack(
+        index: displayIndex,
+        children: List<Widget>.generate(
+          tabs.length,
+          (i) => RepaintBoundary(
+            child: TickerMode(enabled: i == displayIndex, child: tabs[i]),
           ),
         ),
+      );
+    }
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(child: buildIndexedContent()),
+          if (keyboardHeight == 0)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: miniPlayerBottom,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: ResponsiveLayout.isExpanded(context)
+                        ? 760
+                        : double.infinity,
+                  ),
+                  child: const MiniPlayer(),
+                ),
+              ),
+            ),
+          _buildQuickTabSwitcher(
+            context: context,
+            displayIndex: displayIndex,
+            isLocalMode: isLocalMode,
+            top: quickSwitcherTop,
+            bottom: quickSwitcherBottom,
+          ),
+        ],
       ),
     );
   }
@@ -186,17 +260,22 @@ class _DisabledLibraryPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.library_music, size: 56, color: Colors.white38),
-            SizedBox(height: 12),
+          children: [
+            Icon(
+              Icons.library_music_outlined,
+              size: 56,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+            const SizedBox(height: 12),
             Text(
               'Library is disabled in Local-only mode',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: scheme.onSurfaceVariant),
               textAlign: TextAlign.center,
             ),
           ],

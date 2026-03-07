@@ -1,10 +1,10 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:hongit/core/theme/app_theme.dart';
-import 'package:hongit/core/utils/glass_page.dart';
+import 'package:hongit/core/utils/themed_page.dart';
 import 'package:provider/provider.dart';
 import '../../core/utils/app_messenger.dart';
-import '../../core/utils/glass_container.dart';
+import '../../core/utils/themed_container.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../features/library/playlist_manager.dart';
 import 'downloaded_songs_screen.dart';
@@ -27,107 +27,102 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (playlistName == PlaylistManager.systemFavourites) {
       return;
     }
+    final uiTheme = Theme.of(context);
+    final scheme = uiTheme.colorScheme;
+    final textTheme = uiTheme.textTheme;
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.9),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      useSafeArea: true,
+      backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: scheme.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(height: 20),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(
-                playlistName,
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              playlistName,
+              style: textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
+          ),
+          const SizedBox(height: 20),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+          ListTile(
+            leading: Icon(
+              theme.useGlassTheme ? CupertinoIcons.trash : Icons.delete_outline,
+              color: scheme.error,
+            ),
+            title: Text(
+              'Delete Playlist',
+              style: TextStyle(color: scheme.error),
+            ),
+            onTap: () async {
+              Navigator.pop(ctx);
 
-            const SizedBox(height: 20),
-            const Divider(height: 1, color: Colors.white12),
-
-            // Delete playlist option
-            ListTile(
-              leading: Icon(
-                theme.useGlassTheme
-                    ? CupertinoIcons.trash
-                    : Icons.delete_outline,
-                color: Colors.redAccent,
-              ),
-              title: const Text(
-                'Delete Playlist',
-                style: TextStyle(color: Colors.redAccent),
-              ),
-              onTap: () async {
-                Navigator.pop(ctx);
-
-                // Confirm deletion
-                final confirmDelete = await showDialog(
-                  context: context,
-                  builder: (ctx2) => AlertDialog(
-                    title: const Text('Delete Playlist'),
-                    content: Text(
-                      'Are you sure you want to delete "$playlistName"? This cannot be undone.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx2, false),
-                        child: const Text('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx2, true),
-                        child: const Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.redAccent),
-                        ),
-                      ),
-                    ],
+              final confirmDelete = await showDialog(
+                context: context,
+                builder: (ctx2) => AlertDialog(
+                  title: const Text('Delete Playlist'),
+                  content: Text(
+                    'Are you sure you want to delete "$playlistName"? This cannot be undone.',
                   ),
-                );
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx2, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx2, true),
+                      child: Text(
+                        'Delete',
+                        style: TextStyle(color: scheme.error),
+                      ),
+                    ),
+                  ],
+                ),
+              );
 
-                if (confirmDelete == true) {
-                  await PlaylistManager.deletePlaylist(playlistName);
-                  AppMessenger.show('Playlist deleted');
-                }
-              },
+              if (confirmDelete == true) {
+                await PlaylistManager.deletePlaylist(playlistName);
+                AppMessenger.show('Playlist deleted');
+              }
+            },
+          ),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+          ListTile(
+            leading: Icon(
+              theme.useGlassTheme
+                  ? CupertinoIcons.xmark_circle
+                  : Icons.cancel_outlined,
             ),
-
-            const Divider(height: 1, color: Colors.white12),
-
-            // Cancel
-            ListTile(
-              leading: Icon(
-                theme.useGlassTheme
-                    ? CupertinoIcons.xmark_circle
-                    : Icons.cancel_outlined,
-              ),
-              title: const Text('Cancel'),
-              onTap: () => Navigator.pop(ctx),
-            ),
-
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
-          ],
-        ),
+            title: const Text('Cancel'),
+            onTap: () => Navigator.pop(ctx),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+        ],
       ),
     );
   }
@@ -157,25 +152,29 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Widget build(BuildContext context) {
     final player = AudioPlayerService();
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final animateListItems = perfMode == UiPerformanceMode.full;
 
-    return GlassPage(
+    return ThemedPage(
       child: ListView(
         children: [
-          const Text(
+          Text(
             'Library',
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 24),
 
-          const Text(
+          Text(
             'Quick Access',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
               leading: Icon(
                 themeProvider.useGlassTheme
@@ -201,7 +200,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
               leading: Icon(
                 themeProvider.useGlassTheme
@@ -251,7 +250,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
           const SizedBox(height: 12),
 
-          GlassContainer(
+          ThemedContainer(
             child: ListTile(
               leading: Icon(
                 themeProvider.useGlassTheme
@@ -275,9 +274,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
           const SizedBox(height: 32),
 
-          const Text(
+          Text(
             'Playlists',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
 
@@ -288,7 +287,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
               final userPlaylistNames = playlists.keys
                   .where((name) => name != PlaylistManager.systemFavourites)
                   .toList();
-              if (userPlaylistNames.isEmpty) return _empty('No playlists');
+              if (userPlaylistNames.isEmpty) {
+                return _empty(context, 'No playlists');
+              }
 
               return Column(
                 children: userPlaylistNames.asMap().entries.map((entry) {
@@ -300,7 +301,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     animate: animateListItems,
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: GlassContainer(
+                      child: ThemedContainer(
                         child: ListTile(
                           leading: Icon(
                             themeProvider.useGlassTheme
@@ -377,16 +378,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
           const SizedBox(height: 32),
 
-          const Text(
+          Text(
             'Recently Played',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           StreamBuilder<List<Map<String, dynamic>>>(
             stream: player.recentlyPlayedStream,
             builder: (_, snap) {
               final items = (snap.data ?? []).take(20).toList();
-              if (items.isEmpty) return _empty('Nothing played yet');
+              if (items.isEmpty) return _empty(context, 'Nothing played yet');
 
               return Column(
                 children: items.asMap().entries.map((entry) {
@@ -398,7 +399,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     animate: animateListItems,
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 12),
-                      child: GlassContainer(
+                      child: ThemedContainer(
                         child: ListTile(
                           leading: Icon(
                             themeProvider.useGlassTheme
@@ -434,11 +435,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
-  Widget _empty(String text) {
+  Widget _empty(BuildContext context, String text) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Center(
-        child: Text(text, style: const TextStyle(color: Colors.white54)),
+        child: Text(text, style: TextStyle(color: scheme.onSurfaceVariant)),
       ),
     );
   }

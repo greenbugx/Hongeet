@@ -2,65 +2,190 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/data_saver_settings.dart';
 
-enum ProgressBarStyle { defaultStyle, snake, glass }
+enum ProgressBarStyle { defaultStyle, snake }
 
 enum UiPerformanceMode { auto, smooth, full }
 
 class AppTheme {
-  static ThemeData glassTheme = ThemeData(
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: Colors.transparent,
-    primaryColor: const Color(0xFF1DB954),
-    textTheme: ThemeData.dark().textTheme.apply(fontFamily: 'Inter'),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: Color(0xFF111111),
-      selectedItemColor: Color(0xFF1DB954),
-      unselectedItemColor: Colors.grey,
-      showUnselectedLabels: true,
-      type: BottomNavigationBarType.fixed,
-    ),
-  );
+  static const Color defaultSeedColor = Color(0xFF28C76F);
 
-  static ThemeData simpleDarkTheme = ThemeData(
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: const Color(0xFF0D0D0D),
-    primaryColor: const Color(0xFF1DB954),
-    textTheme: ThemeData.dark().textTheme.apply(fontFamily: 'Inter'),
-    appBarTheme: const AppBarTheme(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-    ),
-    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-      backgroundColor: Color(0xFF111111),
-      selectedItemColor: Color(0xFF1DB954),
-      unselectedItemColor: Colors.grey,
-      showUnselectedLabels: true,
-      type: BottomNavigationBarType.fixed,
-    ),
-  );
+  static ThemeData buildTheme({required Color seedColor}) {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seedColor,
+      brightness: Brightness.dark,
+    );
+
+    final textTheme = Typography.material2021(
+      platform: TargetPlatform.android,
+    ).white.apply(fontFamily: 'Inter');
+
+    final base = ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      colorScheme: scheme,
+      fontFamily: 'Inter',
+      textTheme: textTheme,
+      scaffoldBackgroundColor: scheme.surface,
+      appBarTheme: AppBarTheme(
+        elevation: 0,
+        centerTitle: false,
+        scrolledUnderElevation: 0,
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+        surfaceTintColor: Colors.transparent,
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: scheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scheme.surfaceContainer,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: scheme.secondaryContainer,
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final isSelected = states.contains(WidgetState.selected);
+          return textTheme.labelMedium?.copyWith(
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? scheme.onSecondaryContainer : scheme.onSurface,
+          );
+        }),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: scheme.surfaceContainerLow,
+        selectedIconTheme: IconThemeData(color: scheme.onSecondaryContainer),
+        unselectedIconTheme: IconThemeData(
+          color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
+        selectedLabelTextStyle: textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelTextStyle: textTheme.labelMedium,
+        indicatorColor: scheme.secondaryContainer,
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceContainerLow,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.45),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: scheme.outlineVariant.withValues(alpha: 0.45),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: scheme.primary, width: 1.3),
+        ),
+        hintStyle: textTheme.bodyMedium?.copyWith(
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.86),
+        ),
+      ),
+      searchBarTheme: SearchBarThemeData(
+        elevation: const WidgetStatePropertyAll(0),
+        backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
+        side: WidgetStatePropertyAll(
+          BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.45)),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        ),
+        hintStyle: WidgetStatePropertyAll(
+          textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.86),
+          ),
+        ),
+      ),
+      listTileTheme: ListTileThemeData(
+        iconColor: scheme.primary,
+        titleTextStyle: textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
+        subtitleTextStyle: textTheme.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: scheme.inverseSurface,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(
+          color: scheme.onInverseSurface,
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        showDragHandle: true,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: scheme.surfaceContainerHigh,
+        backgroundColor: scheme.surfaceContainerHigh,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      dividerTheme: DividerThemeData(
+        color: scheme.outlineVariant.withValues(alpha: 0.4),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return scheme.onPrimary;
+          }
+          return scheme.outline;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return scheme.primary;
+          }
+          return scheme.surfaceContainerHighest;
+        }),
+      ),
+    );
+
+    return base;
+  }
 }
 
 class ThemeProvider with ChangeNotifier {
-  static const _useGlassThemeKey = 'use_glass_theme';
+  static const _seedColorKey = 'theme_seed_color';
+  static const _legacyUseGlassThemeKey = 'use_glass_theme';
   static const _progressBarStyleKey = 'progress_bar_style';
   static const _uiPerformanceModeKey = 'ui_performance_mode';
   static const _dataSaverKey = DataSaverSettings.prefKey;
 
-  bool _useGlassTheme = false;
-  bool get useGlassTheme => _useGlassTheme;
+  // Kept only for backwards compatibility with older UI branches
+  bool get useGlassTheme => false;
+
+  Color _seedColor = AppTheme.defaultSeedColor;
+  Color get seedColor => _seedColor;
 
   ProgressBarStyle _progressBarStyle = ProgressBarStyle.defaultStyle;
   ProgressBarStyle get progressBarStyle => _progressBarStyle;
-  ProgressBarStyle get effectiveProgressBarStyle {
-    if (!_useGlassTheme && _progressBarStyle == ProgressBarStyle.glass) {
-      return ProgressBarStyle.defaultStyle;
-    }
-    return _progressBarStyle;
-  }
+  ProgressBarStyle get effectiveProgressBarStyle => _progressBarStyle;
 
   UiPerformanceMode _uiPerformanceMode = UiPerformanceMode.auto;
   UiPerformanceMode get uiPerformanceMode => _uiPerformanceMode;
@@ -68,8 +193,7 @@ class ThemeProvider with ChangeNotifier {
   bool _dataSaverEnabled = false;
   bool get dataSaverEnabled => _dataSaverEnabled;
 
-  ThemeData get currentTheme =>
-      _useGlassTheme ? AppTheme.glassTheme : AppTheme.simpleDarkTheme;
+  ThemeData get currentTheme => AppTheme.buildTheme(seedColor: _seedColor);
 
   ThemeProvider() {
     _loadTheme();
@@ -77,7 +201,12 @@ class ThemeProvider with ChangeNotifier {
 
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
-    _useGlassTheme = prefs.getBool(_useGlassThemeKey) ?? false;
+    await prefs.remove(_legacyUseGlassThemeKey);
+    final storedSeed = prefs.getInt(_seedColorKey);
+    _seedColor = storedSeed == null
+        ? AppTheme.defaultSeedColor
+        : Color(storedSeed);
+
     final progressRaw =
         prefs.getString(_progressBarStyleKey) ??
         ProgressBarStyle.defaultStyle.name;
@@ -93,38 +222,31 @@ class ThemeProvider with ChangeNotifier {
     );
     _dataSaverEnabled = prefs.getBool(_dataSaverKey) ?? false;
     DataSaverSettings.setInMemory(_dataSaverEnabled);
-
-    if (!_useGlassTheme && _progressBarStyle == ProgressBarStyle.glass) {
-      _progressBarStyle = ProgressBarStyle.defaultStyle;
-      await prefs.setString(_progressBarStyleKey, _progressBarStyle.name);
-    }
     notifyListeners();
   }
 
-  Future<void> setUseGlassTheme(bool enabled) async {
-    if (_useGlassTheme == enabled) return;
-    _useGlassTheme = enabled;
+  Future<void> setSeedColor(Color color) async {
+    if (_seedColor.toARGB32() == color.toARGB32()) return;
+    _seedColor = color;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_useGlassThemeKey, _useGlassTheme);
-
-    if (!_useGlassTheme && _progressBarStyle == ProgressBarStyle.glass) {
-      _progressBarStyle = ProgressBarStyle.defaultStyle;
-      await prefs.setString(_progressBarStyleKey, _progressBarStyle.name);
-    }
+    await prefs.setInt(_seedColorKey, color.toARGB32());
     notifyListeners();
   }
 
+  @Deprecated('Glass theme has been removed')
+  Future<void> setUseGlassTheme(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_legacyUseGlassThemeKey);
+  }
+
+  @Deprecated('Glass theme has been removed')
   Future<void> toggleTheme() async {
-    await setUseGlassTheme(!_useGlassTheme);
+    await setUseGlassTheme(false);
   }
 
   Future<void> setProgressBarStyle(ProgressBarStyle style) async {
-    final next = (!_useGlassTheme && style == ProgressBarStyle.glass)
-        ? ProgressBarStyle.defaultStyle
-        : style;
-    if (_progressBarStyle == next) return;
-
-    _progressBarStyle = next;
+    if (_progressBarStyle == style) return;
+    _progressBarStyle = style;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_progressBarStyleKey, _progressBarStyle.name);
     notifyListeners();
@@ -159,11 +281,6 @@ class ThemeProvider with ChangeNotifier {
   }
 
   UiPerformanceMode resolvedUiPerformanceMode(BuildContext context) {
-    if (_useGlassTheme) {
-      // Glass mode always renders at full visual strength.
-      return UiPerformanceMode.full;
-    }
-
     if (_uiPerformanceMode != UiPerformanceMode.auto) {
       return _uiPerformanceMode;
     }

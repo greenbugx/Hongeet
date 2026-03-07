@@ -7,8 +7,12 @@ class SleepTimerOverlayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: scheme.scrim,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => Navigator.of(context).maybePop(),
@@ -19,19 +23,18 @@ class SleepTimerOverlayScreen extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.nightlight_round,
                     size: 150,
-                    color: Colors.white,
+                    color: scheme.onSurface,
                   ),
                   const SizedBox(height: 22),
-                  const Text(
+                  Text(
                     'Sleep Timer Active',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 30,
+                    style: textTheme.displaySmall?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: scheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -40,13 +43,17 @@ class SleepTimerOverlayScreen extends StatelessWidget {
                         ? 'Playback stopped after current song.'
                         : 'Playback stopped by sleep timer.',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 15, color: Colors.white70),
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 24),
-                  const Text(
+                  Text(
                     'Tap anywhere to continue',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 13, color: Colors.white54),
+                    style: textTheme.labelLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),

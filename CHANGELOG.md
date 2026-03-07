@@ -1,3 +1,26 @@
+# v1.7.0+18
+
+## Material 3 Refresh + Artist Profiles + Search Reliability
+
+### NEW FEATURES
+
+- **Material 3 UI Refresh:** Migrated major screens/components to Material 3 with responsive spacing and layout behavior.
+- **Dynamic Theme Colors:** Removed legacy glass mode and added seed-color based app theming.
+- **Artist Profile Screen:** Added artist profile page with artist art, bio (more/less), monthly audience, Top Songs, Albums, and Singles & EPs.
+- **Multi-Artist Picker:** Tapping artist name in full player now supports multi-artist tracks using a tap-only picker sheet.
+- **Search Albums Section:** Search now shows a dedicated Albums section under song results with open-to-playlist flow.
+
+### BUG FIXES / IMPROVEMENTS
+
+- **Navigation + Mini-player:** Stabilized right-side quick switcher layout and floating mini-player spacing across screen sizes.
+- **Album Filtering:** Limited search album results to album-only intent and reduced EP/Episode/podcast noise.
+- **YouTube Search Resilience:** Added strategy fallback and persisted cache refresh behavior for more stable results under API/network variance.
+
+### UPCOMING (work in progress)
+
+- Better artist identity matching for edge-case names/collaborations
+- Further recommendation relevance tuning and queue quality improvements
+
 # v1.6.0+17
 
 ## Lyrics + Distribution Flavors + Android Widgets

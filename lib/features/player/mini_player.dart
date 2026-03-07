@@ -4,7 +4,7 @@ import 'package:hongit/core/theme/app_theme.dart';
 import 'package:marquee/marquee.dart';
 import 'package:provider/provider.dart';
 import '../../core/utils/audio_player_service.dart';
-import '../../core/utils/glass_container.dart';
+import '../../core/utils/themed_container.dart';
 import '../../core/utils/youtube_thumbnail_utils.dart';
 import '../../core/widgets/fallback_network_image.dart';
 import 'full_player_sheet.dart';
@@ -73,6 +73,7 @@ class _MiniPlayerContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final animateMiniVisuals = perfMode == UiPerformanceMode.full;
     final imageScale = YoutubeThumbnailUtils.preferredArtworkScale(
       imageUrl: now.imageUrl,
@@ -95,7 +96,7 @@ class _MiniPlayerContent extends StatelessWidget {
             builder: (_) => const FullPlayerSheet(),
           );
         },
-        child: GlassContainer(
+        child: ThemedContainer(
           borderRadius: BorderRadius.circular(24),
           child: Padding(
             padding: const EdgeInsets.all(12),
@@ -154,9 +155,9 @@ class _MiniPlayerContent extends StatelessWidget {
                       const SizedBox(height: 2),
                       _AutoMarqueeText(
                         text: now.artist,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
-                          color: Colors.white70,
+                          color: scheme.onSurfaceVariant,
                         ),
                         enableMarquee: animateMiniVisuals,
                       ),
@@ -204,7 +205,7 @@ class _MiniPlayerContent extends StatelessWidget {
                                             strokeWidth: 2.4,
                                             valueColor:
                                                 AlwaysStoppedAnimation<Color>(
-                                                  Colors.white,
+                                                  scheme.primary,
                                                 ),
                                           ),
                                         ),

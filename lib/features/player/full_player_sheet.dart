@@ -11,15 +11,17 @@ import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/utils/audio_player_service.dart';
-import '../../core/utils/glass_container.dart';
+import '../../core/utils/themed_container.dart';
 import '../../core/utils/streaming_preferences.dart';
 import '../../data/api/local_backend_api.dart';
 import '../../data/api/lrclib_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../core/utils/app_messenger.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/responsive.dart';
 import '../../core/utils/youtube_thumbnail_utils.dart';
 import '../../core/widgets/fallback_network_image.dart';
+import '../search/artist_profile_screen.dart';
 import 'widgets/player_progress_bar.dart';
 
 import '../../features/library/downloaded_songs_provider.dart';
@@ -52,14 +54,152 @@ class FullPlayerSheet extends StatelessWidget {
     return mins > 0 ? '${mins}m ${secs}s' : '${remaining.inSeconds}s';
   }
 
+  bool _isBlockedArtistName(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    return normalized == 'unknown' ||
+        normalized == 'offline' ||
+        normalized == 'local audio' ||
+        normalized == 'artist' ||
+        normalized == 'various artists';
+  }
+
+  List<String> _extractArtistNames(String rawArtist) {
+    var text = rawArtist.trim();
+    if (text.isEmpty) return const <String>[];
+
+    text = text.replaceAll(RegExp(r'\s+'), ' ');
+    text = text.replaceAll(
+      RegExp(r'\b(featuring|feat|ft)\.?\b', caseSensitive: false),
+      ',',
+    );
+    text = text.replaceAll('&', ',');
+    text = text.replaceAll(
+      RegExp(r'\b(and|with|x)\b', caseSensitive: false),
+      ',',
+    );
+
+    final parts = text
+        .split(RegExp(r'[,/;|]+'))
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .map((e) => e.replaceAll(RegExp(r'^\(|\)$'), '').trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+
+    final out = <String>[];
+    final seen = <String>{};
+    for (final part in parts) {
+      if (_isBlockedArtistName(part)) continue;
+      final key = part.toLowerCase();
+      if (!seen.add(key)) continue;
+      out.add(part);
+    }
+
+    return out;
+  }
+
+  void _pushArtistProfile(BuildContext context, String artist) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ArtistProfileScreen(artistName: artist),
+      ),
+    );
+  }
+
+  void _openArtistProfile(BuildContext context, String rawArtist) {
+    final artists = _extractArtistNames(rawArtist);
+    if (artists.isEmpty) {
+      AppMessenger.show('Artist profile not available');
+      return;
+    }
+
+    if (artists.length == 1) {
+      _pushArtistProfile(context, artists.first);
+      return;
+    }
+
+    final uiTheme = Theme.of(context);
+    final scheme = uiTheme.colorScheme;
+    final textTheme = uiTheme.textTheme;
+    final stableContext = context;
+
+    showModalBottomSheet(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: EdgeInsets.fromLTRB(
+              12,
+              8,
+              12,
+              8 + MediaQuery.of(sheetCtx).viewPadding.bottom,
+            ),
+            children: [
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: scheme.outlineVariant,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(
+                  'Choose Artist',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              ...artists.map(
+                (artist) => ListTile(
+                  title: Text(artist),
+                  trailing: Icon(
+                    CupertinoIcons.chevron_right,
+                    size: 18,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onTap: () {
+                    Navigator.of(sheetCtx).pop();
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!stableContext.mounted) return;
+                      _pushArtistProfile(stableContext, artist);
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _showSleepTimerSheet(
     BuildContext context,
     AudioPlayerService player,
     bool useGlassTheme,
   ) {
+    final uiTheme = Theme.of(context);
+    final scheme = uiTheme.colorScheme;
+    final textTheme = uiTheme.textTheme;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black.withValues(alpha: 0.88),
+      useSafeArea: true,
+      backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -73,14 +213,16 @@ class FullPlayerSheet extends StatelessWidget {
                 width: 42,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: scheme.outlineVariant,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 'Sleep Timer',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 6),
               StreamBuilder<SleepTimerStatus>(
@@ -88,7 +230,9 @@ class FullPlayerSheet extends StatelessWidget {
                 initialData: player.sleepTimerStatus,
                 builder: (_, snap) => Text(
                   'Current: ${_sleepTimerLabel(snap.data ?? const SleepTimerStatus.off())}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
@@ -148,18 +292,12 @@ class FullPlayerSheet extends StatelessWidget {
   Future<void> _downloadSong(QueuedSong song) async {
     await StreamingPreferences.reload();
     if (!StreamingPreferences.isStreamingEnabled) {
-      AppMessenger.show(
-        'Enable a streaming service in Settings to download.',
-        color: Colors.orange.shade700,
-      );
+      AppMessenger.show('Enable a streaming service in Settings to download.');
       return;
     }
 
     if (_queuedOrActiveSongIds.contains(song.id)) {
-      AppMessenger.show(
-        'Already queued: ${song.meta.title}',
-        color: Colors.orange.shade700,
-      );
+      AppMessenger.show('Already queued: ${song.meta.title}');
       return;
     }
 
@@ -170,13 +308,9 @@ class FullPlayerSheet extends StatelessWidget {
     if (pendingTotal > _queueFeedbackThreshold) {
       AppMessenger.show(
         'Queued $pendingTotal downloads. Running $_maxConcurrentDownloads at a time.',
-        color: Colors.blueGrey.shade800,
       );
     } else {
-      AppMessenger.show(
-        'Added to queue: ${song.meta.title}',
-        color: Colors.blueGrey.shade800,
-      );
+      AppMessenger.show('Added to queue: ${song.meta.title}');
     }
 
     _pumpDownloadQueue();
@@ -194,10 +328,7 @@ class FullPlayerSheet extends StatelessWidget {
   void _runDownloadTask(_QueuedDownloadTask task) {
     () async {
       final song = task.song;
-      AppMessenger.show(
-        'Downloading: ${song.meta.title}',
-        color: Colors.blueGrey.shade800,
-      );
+      AppMessenger.show('Downloading: ${song.meta.title}');
 
       try {
         if (song.id.startsWith('yt:')) {
@@ -214,9 +345,9 @@ class FullPlayerSheet extends StatelessWidget {
           );
         }
 
-        AppMessenger.show('Download complete', color: Colors.green.shade700);
+        AppMessenger.show('Download complete');
       } catch (_) {
-        AppMessenger.show('Download failed', color: Colors.red.shade700);
+        AppMessenger.show('Download failed');
       } finally {
         _queuedOrActiveSongIds.remove(song.id);
         if (_activeDownloadCount > 0) {
@@ -244,6 +375,7 @@ class FullPlayerSheet extends StatelessWidget {
     QueuedSong song,
     AudioPlayerService player,
   ) async {
+    final errorColor = Theme.of(context).colorScheme.error;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -256,10 +388,7 @@ class FullPlayerSheet extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: Text('Delete', style: TextStyle(color: errorColor)),
           ),
         ],
       ),
@@ -281,10 +410,7 @@ class FullPlayerSheet extends StatelessWidget {
       }
     }
 
-    AppMessenger.show(
-      'Deleted ${song.meta.title}',
-      color: Colors.redAccent.shade700,
-    );
+    AppMessenger.show('Deleted ${song.meta.title}', color: errorColor);
     if (context.mounted) {
       Navigator.of(context).maybePop();
     }
@@ -295,6 +421,7 @@ class FullPlayerSheet extends StatelessWidget {
     QueuedSong song,
     AudioPlayerService player,
   ) async {
+    final errorColor = Theme.of(context).colorScheme.error;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -307,10 +434,7 @@ class FullPlayerSheet extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: Text('Delete', style: TextStyle(color: errorColor)),
           ),
         ],
       ),
@@ -325,7 +449,7 @@ class FullPlayerSheet extends StatelessWidget {
         if (status.isDenied) {
           AppMessenger.show(
             'Permission denied. Cannot delete file.',
-            color: Colors.red.shade700,
+            color: errorColor,
           );
           return;
         }
@@ -333,7 +457,7 @@ class FullPlayerSheet extends StatelessWidget {
         if (status.isPermanentlyDenied) {
           AppMessenger.show(
             'Storage permission permanently denied. Open app settings to enable it.',
-            color: Colors.red.shade700,
+            color: errorColor,
           );
           openAppSettings();
           return;
@@ -364,25 +488,19 @@ class FullPlayerSheet extends StatelessWidget {
 
           LocalAudioProvider.notifyChanged();
 
-          AppMessenger.show(
-            'Deleted ${song.meta.title}',
-            color: Colors.redAccent.shade700,
-          );
+          AppMessenger.show('Deleted ${song.meta.title}', color: errorColor);
         } catch (e) {
-          AppMessenger.show(
-            'Failed to delete file',
-            color: Colors.red.shade700,
-          );
+          AppMessenger.show('Failed to delete file', color: errorColor);
         }
       } else {
-        AppMessenger.show('File not found', color: Colors.orange.shade700);
+        AppMessenger.show('File not found');
       }
 
       if (context.mounted) {
         Navigator.of(context).maybePop();
       }
     } catch (e) {
-      AppMessenger.show('Error: ${e.toString()}', color: Colors.red.shade700);
+      AppMessenger.show('Error: ${e.toString()}', color: errorColor);
     }
   }
 
@@ -390,12 +508,17 @@ class FullPlayerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = AudioPlayerService();
     final theme = Provider.of<ThemeProvider>(context);
+    final uiTheme = Theme.of(context);
+    final scheme = uiTheme.colorScheme;
     final perfMode = theme.resolvedUiPerformanceMode(context);
     final fullVisuals = perfMode == UiPerformanceMode.full;
     final smoothVisuals = perfMode == UiPerformanceMode.smooth;
     final backdropBlur = fullVisuals ? 30.0 : 16.0;
     final mainArtCacheSize = smoothVisuals ? 512 : 768;
     final queueArtCacheSize = smoothVisuals ? 192 : 256;
+    final horizontalPadding = ResponsiveLayout.isExpanded(context)
+        ? 24.0
+        : 16.0;
 
     return StreamBuilder<NowPlaying?>(
       stream: player.nowPlayingStream,
@@ -447,7 +570,7 @@ class FullPlayerSheet extends StatelessWidget {
                 return Stack(
                   children: [
                     if (smoothVisuals)
-                      Container(color: Colors.black.withValues(alpha: 0.72))
+                      Container(color: scheme.scrim.withValues(alpha: 0.72))
                     else
                       BackdropFilter(
                         filter: ImageFilter.blur(
@@ -455,7 +578,7 @@ class FullPlayerSheet extends StatelessWidget {
                           sigmaY: backdropBlur,
                         ),
                         child: Container(
-                          color: Colors.black.withValues(alpha: 0.65),
+                          color: scheme.scrim.withValues(alpha: 0.66),
                         ),
                       ),
 
@@ -467,7 +590,9 @@ class FullPlayerSheet extends StatelessWidget {
                         return ListView(
                           controller: controller,
                           cacheExtent: 900,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          padding: EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                          ),
                           children: [
                             const SizedBox(height: 16),
 
@@ -476,7 +601,7 @@ class FullPlayerSheet extends StatelessWidget {
                                 song: currentSong,
                                 player: player,
                                 useGlassTheme: theme.useGlassTheme,
-                                frontCard: GlassContainer(
+                                frontCard: ThemedContainer(
                                   borderRadius: BorderRadius.circular(32),
                                   child: Padding(
                                     padding: const EdgeInsets.all(20),
@@ -489,7 +614,7 @@ class FullPlayerSheet extends StatelessWidget {
                                             bottom: 16,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.white30,
+                                            color: scheme.outlineVariant,
                                             borderRadius: BorderRadius.circular(
                                               2,
                                             ),
@@ -514,7 +639,8 @@ class FullPlayerSheet extends StatelessWidget {
                                                 filterQuality:
                                                     FilterQuality.medium,
                                                 fallback: Container(
-                                                  color: Colors.black26,
+                                                  color: scheme
+                                                      .surfaceContainerHighest,
                                                   child: const Icon(
                                                     Icons.music_note_rounded,
                                                     size: 56,
@@ -542,11 +668,26 @@ class FullPlayerSheet extends StatelessWidget {
 
                                         SizedBox(
                                           height: 20,
-                                          child: _AutoMarqueeText(
-                                            text: now.artist,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.white70,
+                                          child: GestureDetector(
+                                            behavior:
+                                                HitTestBehavior.translucent,
+                                            onTap: () => _openArtistProfile(
+                                              context,
+                                              now.artist,
+                                            ),
+                                            child: _AutoMarqueeText(
+                                              text: now.artist,
+                                              style:
+                                                  uiTheme.textTheme.bodyMedium
+                                                      ?.copyWith(
+                                                        color: scheme
+                                                            .onSurfaceVariant,
+                                                      ) ??
+                                                  TextStyle(
+                                                    fontSize: 14,
+                                                    color:
+                                                        scheme.onSurfaceVariant,
+                                                  ),
                                             ),
                                           ),
                                         ),
@@ -595,8 +736,6 @@ class FullPlayerSheet extends StatelessWidget {
                                                           max: max,
                                                           style: theme
                                                               .effectiveProgressBarStyle,
-                                                          useGlassTheme: theme
-                                                              .useGlassTheme,
                                                           onChanged:
                                                               isTrackLoading
                                                               ? (_) {}
@@ -621,19 +760,37 @@ class FullPlayerSheet extends StatelessWidget {
                                                             children: [
                                                               Text(
                                                                 _fmt(shownPos),
-                                                                style: const TextStyle(
-                                                                  fontSize: 12,
-                                                                  color: Colors
-                                                                      .white70,
-                                                                ),
+                                                                style:
+                                                                    uiTheme
+                                                                        .textTheme
+                                                                        .labelMedium
+                                                                        ?.copyWith(
+                                                                          color:
+                                                                              scheme.onSurfaceVariant,
+                                                                        ) ??
+                                                                    TextStyle(
+                                                                      fontSize:
+                                                                          12,
+                                                                      color: scheme
+                                                                          .onSurfaceVariant,
+                                                                    ),
                                                               ),
                                                               Text(
                                                                 _fmt(shownDur),
-                                                                style: const TextStyle(
-                                                                  fontSize: 12,
-                                                                  color: Colors
-                                                                      .white70,
-                                                                ),
+                                                                style:
+                                                                    uiTheme
+                                                                        .textTheme
+                                                                        .labelMedium
+                                                                        ?.copyWith(
+                                                                          color:
+                                                                              scheme.onSurfaceVariant,
+                                                                        ) ??
+                                                                    TextStyle(
+                                                                      fontSize:
+                                                                          12,
+                                                                      color: scheme
+                                                                          .onSurfaceVariant,
+                                                                    ),
                                                               ),
                                                             ],
                                                           ),
@@ -680,8 +837,10 @@ class FullPlayerSheet extends StatelessWidget {
                                                           color:
                                                               mode ==
                                                                   LoopMode.off
-                                                              ? Colors.white54
-                                                              : Colors.white,
+                                                              ? scheme
+                                                                    .onSurfaceVariant
+                                                              : scheme
+                                                                    .onSurface,
                                                         ),
                                                         onPressed: player
                                                             .toggleLoopMode,
@@ -749,7 +908,7 @@ class FullPlayerSheet extends StatelessWidget {
                                                                               AlwaysStoppedAnimation<
                                                                                 Color
                                                                               >(
-                                                                                Colors.white,
+                                                                                scheme.primary,
                                                                               ),
                                                                         ),
                                                                       ),
@@ -820,7 +979,7 @@ class FullPlayerSheet extends StatelessWidget {
                                                                   .trash
                                                             : Icons
                                                                   .delete_outline,
-                                                        color: Colors.redAccent,
+                                                        color: scheme.error,
                                                       ),
                                                       onPressed: () =>
                                                           _deleteDownloadedSong(
@@ -840,7 +999,7 @@ class FullPlayerSheet extends StatelessWidget {
                                                                   .trash
                                                             : Icons
                                                                   .delete_outline,
-                                                        color: Colors.redAccent,
+                                                        color: scheme.error,
                                                       ),
                                                       onPressed: () =>
                                                           _deleteLocalAudio(
@@ -897,10 +1056,9 @@ class FullPlayerSheet extends StatelessWidget {
                                                                       : Icons
                                                                             .favorite_border),
                                                             color: isFav
-                                                                ? Colors
-                                                                      .redAccent
-                                                                : Colors
-                                                                      .white70,
+                                                                ? scheme.error
+                                                                : scheme
+                                                                      .onSurfaceVariant,
                                                           ),
                                                           iconSize: 26,
                                                           onPressed: () async =>
@@ -951,9 +1109,9 @@ class FullPlayerSheet extends StatelessWidget {
                                                           color:
                                                               timerStatus
                                                                   .isActive
-                                                              ? Colors
-                                                                    .lightBlueAccent
-                                                              : Colors.white70,
+                                                              ? scheme.primary
+                                                              : scheme
+                                                                    .onSurfaceVariant,
                                                         ),
                                                         iconSize: 26,
                                                         onPressed: () {
@@ -975,7 +1133,8 @@ class FullPlayerSheet extends StatelessWidget {
                                                                   .music_note_list
                                                             : Icons
                                                                   .playlist_add,
-                                                        color: Colors.white70,
+                                                        color: scheme
+                                                            .onSurfaceVariant,
                                                       ),
                                                       iconSize: 26,
                                                       onPressed: () {
@@ -990,12 +1149,16 @@ class FullPlayerSheet extends StatelessWidget {
                                               ),
                                             ],
                                             const SizedBox(height: 12),
-                                            const Text(
+                                            Text(
                                               'Swipe right for lyrics',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.white54,
-                                              ),
+                                              style: uiTheme
+                                                  .textTheme
+                                                  .labelMedium
+                                                  ?.copyWith(
+                                                    fontSize: 12,
+                                                    color:
+                                                        scheme.onSurfaceVariant,
+                                                  ),
                                               textAlign: TextAlign.center,
                                             ),
                                           ],
@@ -1021,7 +1184,7 @@ class FullPlayerSheet extends StatelessWidget {
                                 (upcomingSong) => RepaintBoundary(
                                   child: Padding(
                                     padding: const EdgeInsets.only(bottom: 10),
-                                    child: GlassContainer(
+                                    child: ThemedContainer(
                                       child: ListTile(
                                         leading: ClipRRect(
                                           clipBehavior: Clip.antiAlias,
@@ -1060,7 +1223,8 @@ class FullPlayerSheet extends StatelessWidget {
                                               fallback: Container(
                                                 width: 48,
                                                 height: 48,
-                                                color: Colors.black26,
+                                                color: scheme
+                                                    .surfaceContainerHighest,
                                                 child: const Icon(
                                                   Icons.music_note_rounded,
                                                   size: 22,
@@ -1098,7 +1262,7 @@ class FullPlayerSheet extends StatelessWidget {
                                                   theme.useGlassTheme
                                                       ? CupertinoIcons.trash
                                                       : Icons.delete_outline,
-                                                  color: Colors.redAccent,
+                                                  color: scheme.error,
                                                 ),
                                                 onPressed: () async {
                                                   if (_isDownloadedLocalTrack(
@@ -1168,8 +1332,9 @@ class FullPlayerSheet extends StatelessWidget {
                                                                     : Icons
                                                                           .favorite_border),
                                                           color: isFav
-                                                              ? Colors.redAccent
-                                                              : Colors.white70,
+                                                              ? scheme.error
+                                                              : scheme
+                                                                    .onSurfaceVariant,
                                                         ),
                                                         onPressed: () async =>
                                                             await PlaylistManager.toggleFavourite({
@@ -1211,7 +1376,8 @@ class FullPlayerSheet extends StatelessWidget {
                                                                     .music_note_list
                                                               : Icons
                                                                     .playlist_add,
-                                                          color: Colors.white70,
+                                                          color: scheme
+                                                              .onSurfaceVariant,
                                                         ),
                                                         onPressed: () =>
                                                             _showAddToPlaylistSheet(
@@ -1256,6 +1422,9 @@ class _QueuedDownloadTask {
 
 void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
   final stableContext = context;
+  final uiTheme = Theme.of(context);
+  final scheme = uiTheme.colorScheme;
+  final textTheme = uiTheme.textTheme;
   final useGlassTheme = Provider.of<ThemeProvider>(
     context,
     listen: false,
@@ -1278,7 +1447,7 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    backgroundColor: Colors.black.withValues(alpha: 0.85),
+    backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
@@ -1308,20 +1477,21 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                   child: Column(
                     mainAxisSize: MainAxisSize.max,
                     children: [
-                      const Text(
+                      Text(
                         'Add to Playlist',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                        style: textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 12),
                       Expanded(
                         child: playlistNames.isEmpty
-                            ? const Center(
+                            ? Center(
                                 child: Text(
                                   'No playlists yet',
-                                  style: TextStyle(color: Colors.white54),
+                                  style: TextStyle(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
                                 ),
                               )
                             : ListView(
@@ -1342,16 +1512,13 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                                       return ListTile(
                                         leading: Icon(
                                           added ? addedIcon() : playlistIcon(),
-                                          color: added
-                                              ? Colors.green.shade400
-                                              : null,
+                                          color: added ? scheme.primary : null,
                                         ),
                                         title: Text(name),
                                         onTap: () async {
                                           if (added) {
                                             AppMessenger.show(
                                               'Already in "$name"',
-                                              color: Colors.orange.shade700,
                                             );
                                             return;
                                           }
@@ -1375,12 +1542,10 @@ void _showAddToPlaylistSheet(BuildContext context, QueuedSong song) {
                                             );
                                             AppMessenger.show(
                                               'Added to "$name"',
-                                              color: Colors.green.shade700,
                                             );
                                           } else {
                                             AppMessenger.show(
                                               'Already in "$name"',
-                                              color: Colors.orange.shade700,
                                             );
                                           }
                                         },
@@ -1442,10 +1607,7 @@ void _showCreatePlaylistDialog(BuildContext context) {
             await PlaylistManager.create(name);
             if (!dialogContext.mounted) return;
             Navigator.of(dialogContext).pop();
-            AppMessenger.show(
-              'Playlist "$name" created',
-              color: Colors.green.shade700,
-            );
+            AppMessenger.show('Playlist "$name" created');
           },
           child: const Text('Create'),
         ),
@@ -1668,7 +1830,10 @@ class _LyricsBackCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activeSong = song;
-    return GlassContainer(
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    return ThemedContainer(
       borderRadius: BorderRadius.circular(32),
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -1680,7 +1845,7 @@ class _LyricsBackCard extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: Colors.white30,
+                color: scheme.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -1691,13 +1856,15 @@ class _LyricsBackCard extends StatelessWidget {
                       ? CupertinoIcons.music_note_2
                       : Icons.lyrics_outlined,
                   size: 20,
-                  color: Colors.white70,
+                  color: scheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Lyrics',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 FutureBuilder<LrcLibLyrics?>(
@@ -1712,11 +1879,11 @@ class _LyricsBackCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: isSynced
-                            ? Colors.white.withValues(alpha: 0.15)
-                            : Colors.white.withValues(alpha: 0.07),
+                            ? scheme.primary.withValues(alpha: 0.2)
+                            : scheme.surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
+                          color: scheme.outlineVariant.withValues(alpha: 0.6),
                         ),
                       ),
                       child: Text(
@@ -1725,7 +1892,9 @@ class _LyricsBackCard extends StatelessWidget {
                           fontSize: 11,
                           fontFamily: 'Helvetica',
                           fontWeight: FontWeight.w700,
-                          color: isSynced ? Colors.white : Colors.white54,
+                          color: isSynced
+                              ? scheme.onPrimaryContainer
+                              : scheme.onSurfaceVariant,
                           letterSpacing: 0.3,
                         ),
                       ),
@@ -1736,23 +1905,23 @@ class _LyricsBackCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             if (activeSong == null)
-              const SizedBox(
+              SizedBox(
                 height: 360,
                 child: Center(
                   child: Text(
                     'No song playing',
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
                 ),
               )
             else if (activeSong.isLocal)
-              const SizedBox(
+              SizedBox(
                 height: 360,
                 child: Center(
                   child: Text(
                     'Lyrics are currently available for streaming tracks only.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(color: scheme.onSurfaceVariant),
                   ),
                 ),
               )
@@ -1767,30 +1936,30 @@ class _LyricsBackCard extends StatelessWidget {
                     }
 
                     if (snapshot.hasError) {
-                      return const Center(
+                      return Center(
                         child: Text(
                           'Lyrics failed to load.',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       );
                     }
 
                     final lyrics = snapshot.data;
                     if (lyrics == null) {
-                      return const Center(
+                      return Center(
                         child: Text(
                           'No lyrics found for this song.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       );
                     }
 
                     if (lyrics.instrumental) {
-                      return const Center(
+                      return Center(
                         child: Text(
                           'Instrumental track.',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       );
                     }
@@ -1805,10 +1974,10 @@ class _LyricsBackCard extends StatelessWidget {
 
                     final plain = lyrics.plainLyrics.trim();
                     if (plain.isEmpty) {
-                      return const Center(
+                      return Center(
                         child: Text(
                           'No lyrics available.',
-                          style: TextStyle(color: Colors.white70),
+                          style: TextStyle(color: scheme.onSurfaceVariant),
                         ),
                       );
                     }
@@ -1821,11 +1990,11 @@ class _LyricsBackCard extends StatelessWidget {
                       child: Text(
                         plain,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: textTheme.bodyLarge?.copyWith(
                           fontSize: 17,
                           fontFamily: 'Helvetica',
                           fontWeight: FontWeight.w400,
-                          color: Colors.white70,
+                          color: scheme.onSurfaceVariant,
                           height: 1.7,
                         ),
                       ),
@@ -1834,9 +2003,12 @@ class _LyricsBackCard extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Swipe left to return to player controls',
-              style: TextStyle(fontSize: 12, color: Colors.white54),
+              style: textTheme.labelMedium?.copyWith(
+                fontSize: 12,
+                color: scheme.onSurfaceVariant,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1941,6 +2113,7 @@ class _SyncedLyricsViewState extends State<_SyncedLyricsView>
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
       builder: (context, constraints) {
         final centerY = constraints.maxHeight / 2 - _lineHeight / 2;
@@ -1998,7 +2171,7 @@ class _SyncedLyricsViewState extends State<_SyncedLyricsView>
                             fontWeight: isActive
                                 ? FontWeight.w700
                                 : FontWeight.w400,
-                            color: Colors.white,
+                            color: scheme.onSurface,
                           ),
                           child: Text(
                             widget.lines[index].text,
