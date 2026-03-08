@@ -6,7 +6,8 @@ Security fixes are provided only for the latest stable release line.
 
 | Version   | Supported |
 | --------- | --------- |
-| 1.6.x     | ✅        |
+| 1.7.x     | ✅        |
+| 1.6.x     | ❌        |
 | 1.5.x     | ❌        |
 | 1.4.x     | ❌        |
 | 1.3.x     | ❌        |
