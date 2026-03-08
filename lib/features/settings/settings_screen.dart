@@ -274,9 +274,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _showColorPickerDialog(ThemeProvider themeProvider) async {
-    int red = themeProvider.seedColor.r.toInt();
-    int green = themeProvider.seedColor.g.toInt();
-    int blue = themeProvider.seedColor.b.toInt();
+    final seedArgb = themeProvider.seedColor.toARGB32();
+    int red = (seedArgb >> 16) & 0xFF;
+    int green = (seedArgb >> 8) & 0xFF;
+    int blue = seedArgb & 0xFF;
 
     await showDialog<void>(
       context: context,

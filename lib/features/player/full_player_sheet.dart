@@ -75,9 +75,10 @@ class FullPlayerSheet extends StatelessWidget {
     );
     text = text.replaceAll('&', ',');
     text = text.replaceAll(
-      RegExp(r'\b(and|with|x)\b', caseSensitive: false),
+      RegExp(r'\b(and|with)\b', caseSensitive: false),
       ',',
     );
+    text = text.replaceAll(RegExp(r'\s+[xX]\s+'), ',');
 
     final parts = text
         .split(RegExp(r'[,/;|]+'))
