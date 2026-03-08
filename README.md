@@ -62,7 +62,7 @@ Hongeet is a music player that supports **offline local audio playback** and **o
 
 | 🧠 Smart Playback | 🖤 UI / UX |
 | :--- | :--- |
-| • History & Recents<br>• Loop modes (Off / All / One)<br>• Background playback service | • Glassmorphism-inspired design<br>• Smooth animations<br>• Full-screen & Mini player support |
+| • History & Recents<br>• Loop modes (Off / All / One)<br>• Background playback service | • Material3-inspired design<br>• Smooth animations<br>• Full-screen & Mini player support |
 
 | 🎤 Lyrics | ⚙️ Performance |
 | :--- | :--- |
