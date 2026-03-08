@@ -17,18 +17,22 @@ class AppMessenger {
     _entry?.remove();
 
     _entry = OverlayEntry(
-      builder: (_) => SafeArea(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 90, left: 16, right: 16),
-            child: _Toast(
-              message: message,
-              color: color ?? Colors.black.withValues(alpha: 0.85),
+      builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 90, left: 16, right: 16),
+              child: _Toast(
+                message: message,
+                color: color ?? scheme.inverseSurface,
+                textColor: scheme.onInverseSurface,
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
 
     overlay.insert(_entry!);
@@ -43,8 +47,13 @@ class AppMessenger {
 class _Toast extends StatelessWidget {
   final String message;
   final Color color;
+  final Color textColor;
 
-  const _Toast({required this.message, required this.color});
+  const _Toast({
+    required this.message,
+    required this.color,
+    required this.textColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +67,7 @@ class _Toast extends StatelessWidget {
         ),
         child: Text(
           message,
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: textColor),
           textAlign: TextAlign.center,
         ),
       ),

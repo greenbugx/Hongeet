@@ -9,7 +9,6 @@ class PlayerProgressBar extends StatelessWidget {
   final double max;
   final ValueChanged<double> onChanged;
   final ProgressBarStyle style;
-  final bool useGlassTheme;
 
   const PlayerProgressBar({
     super.key,
@@ -17,7 +16,6 @@ class PlayerProgressBar extends StatelessWidget {
     required this.max,
     required this.onChanged,
     required this.style,
-    required this.useGlassTheme,
   });
 
   double get _safeMax => max > 0 ? max : 1.0;
@@ -26,27 +24,16 @@ class PlayerProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     switch (style) {
       case ProgressBarStyle.snake:
         return _SnakeProgressBar(
           value: _safeValue,
           max: _safeMax,
           onChanged: onChanged,
-          activeColor: const Color(0xFF1DB954),
-          inactiveColor: Colors.white.withValues(alpha: 0.28),
-        );
-      case ProgressBarStyle.glass:
-        return SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            trackHeight: 8,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            activeTrackColor: Colors.white.withValues(alpha: 0.92),
-            inactiveTrackColor: Colors.white.withValues(alpha: 0.24),
-            thumbColor: const Color(0xFF1DB954),
-            overlayColor: Colors.white.withValues(alpha: 0.12),
-          ),
-          child: Slider(value: _safeValue, max: _safeMax, onChanged: onChanged),
+          activeColor: scheme.primary,
+          inactiveColor: scheme.outlineVariant.withValues(alpha: 0.6),
         );
       case ProgressBarStyle.defaultStyle:
         return Slider(value: _safeValue, max: _safeMax, onChanged: onChanged);
@@ -157,7 +144,7 @@ class _SnakeProgressPainter extends CustomPainter {
       final headOutline = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.8
-        ..color = Colors.black.withValues(alpha: 0.35);
+        ..color = inactiveColor.withValues(alpha: 0.7);
 
       canvas.drawCircle(tangent.position, 8, headFill);
       canvas.drawCircle(tangent.position, 8, headOutline);

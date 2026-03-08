@@ -1,0 +1,7 @@
+v1.7.0+18
+- Material 3 UI refresh with improved spacing and responsive layouts
+- Dynamic seed-color theming; removed legacy glass mode
+- Added artist profile with bio, audience, top songs, albums, singles
+- Search now includes Albums section
+- Improved navigation and mini-player spacing
+- Improved YouTube search reliability

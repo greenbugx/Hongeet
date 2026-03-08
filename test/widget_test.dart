@@ -9,13 +9,15 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({
-      'use_glass_theme': false,
+      'theme_seed_color': AppTheme.defaultSeedColor.toARGB32(),
       'progress_bar_style': 'defaultStyle',
       'ui_performance_mode': 'auto',
     });
   });
 
-  testWidgets('ThemeProvider loads default dark theme', (WidgetTester tester) async {
+  testWidgets('ThemeProvider loads default dark theme', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       ChangeNotifierProvider(
         create: (_) => ThemeProvider(),
@@ -39,14 +41,17 @@ void main() {
     expect(find.text('ready'), findsOneWidget);
   });
 
-  testWidgets('ThemeProvider can switch to glass theme', (WidgetTester tester) async {
+  testWidgets('ThemeProvider can update Material 3 seed color', (
+    WidgetTester tester,
+  ) async {
     SharedPreferences.setMockInitialValues({
-      'use_glass_theme': false,
+      'theme_seed_color': AppTheme.defaultSeedColor.toARGB32(),
       'progress_bar_style': 'defaultStyle',
       'ui_performance_mode': 'auto',
     });
 
     final provider = ThemeProvider();
+    const updatedSeed = Color(0xFFE57373);
     await tester.pumpWidget(
       ChangeNotifierProvider<ThemeProvider>.value(
         value: provider,
@@ -56,9 +61,7 @@ void main() {
             return MaterialApp(
               theme: active.currentTheme,
               home: Scaffold(
-                body: Text(
-                  active.useGlassTheme ? 'glass' : 'simple',
-                ),
+                body: Text(active.seedColor.toARGB32().toString()),
               ),
             );
           },
@@ -66,14 +69,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('simple'), findsOneWidget);
+    final defaultSeedText = AppTheme.defaultSeedColor.toARGB32().toString();
+    expect(find.text(defaultSeedText), findsOneWidget);
 
-    await provider.setUseGlassTheme(true);
+    await provider.setSeedColor(updatedSeed);
     await tester.pumpAndSettle();
 
-    expect(find.text('glass'), findsOneWidget);
-    final context = tester.element(find.text('glass'));
+    final updatedSeedText = updatedSeed.toARGB32().toString();
+    expect(find.text(updatedSeedText), findsOneWidget);
+    final context = tester.element(find.text(updatedSeedText));
     final theme = Theme.of(context);
-    expect(theme.scaffoldBackgroundColor, Colors.transparent);
+    expect(provider.seedColor.toARGB32(), updatedSeed.toARGB32());
+    expect(theme.brightness, Brightness.dark);
   });
 }

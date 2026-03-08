@@ -6,9 +6,10 @@ import 'package:provider/provider.dart';
 import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/youtube_thumbnail_utils.dart';
 import '../../core/widgets/fallback_network_image.dart';
-import '../../core/utils/glass_container.dart';
-import '../../core/utils/glass_page.dart';
+import '../../core/utils/themed_container.dart';
+import '../../core/utils/themed_page.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/responsive.dart';
 import '../../core/utils/app_messenger.dart';
 import '../../features/library/playlist_manager.dart';
 import '../player/mini_player.dart';
@@ -92,6 +93,9 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
     Map<String, dynamic> song,
     ThemeProvider theme,
   ) {
+    final uiTheme = Theme.of(context);
+    final scheme = uiTheme.colorScheme;
+    final textTheme = uiTheme.textTheme;
     final perfMode = theme.resolvedUiPerformanceMode(context);
     final thumbFilterQuality = perfMode == UiPerformanceMode.full
         ? FilterQuality.medium
@@ -106,122 +110,121 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.9),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+      useSafeArea: true,
+      backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.96),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: scheme.outlineVariant,
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(height: 20),
+          ),
+          const SizedBox(height: 20),
 
-            // Song info
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: FallbackNetworkImage(
-                      urls: imageCandidates,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: FallbackNetworkImage(
+                    urls: imageCandidates,
+                    width: 56,
+                    height: 56,
+                    fit: BoxFit.cover,
+                    filterQuality: thumbFilterQuality,
+                    fallback: Container(
                       width: 56,
                       height: 56,
-                      fit: BoxFit.cover,
-                      filterQuality: thumbFilterQuality,
-                      fallback: Container(
-                        width: 56,
-                        height: 56,
-                        color: Colors.white12,
-                        child: const Icon(Icons.music_note),
+                      color: scheme.surfaceContainerHighest,
+                      child: const Icon(Icons.music_note),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        song['title'],
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          song['title'],
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 4),
+                      Text(
+                        song['artist'],
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          song['artist'],
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
 
-            const SizedBox(height: 20),
-            const Divider(height: 1, color: Colors.white12),
+          const SizedBox(height: 20),
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
 
-            // Remove from playlist option
-            ListTile(
-              leading: Icon(
-                theme.useGlassTheme
-                    ? CupertinoIcons.minus_circle
-                    : Icons.remove_circle_outline,
-                color: Colors.redAccent,
-              ),
-              title: Text(
+          ListTile(
+            leading: Icon(
+              theme.useGlassTheme
+                  ? CupertinoIcons.minus_circle
+                  : Icons.remove_circle_outline,
+              color: scheme.error,
+            ),
+            title: Text(
+              widget.name == PlaylistManager.systemFavourites
+                  ? 'Remove from Favorites'
+                  : 'Remove from Playlist',
+              style: TextStyle(color: scheme.error),
+            ),
+            onTap: () async {
+              Navigator.pop(ctx);
+              await PlaylistManager.removeSong(widget.name, song['id']);
+              AppMessenger.show(
                 widget.name == PlaylistManager.systemFavourites
-                    ? 'Remove from Favorites'
-                    : 'Remove from Playlist',
-                style: const TextStyle(color: Colors.redAccent),
-              ),
-              onTap: () async {
-                Navigator.pop(ctx);
-                await PlaylistManager.removeSong(widget.name, song['id']);
-                AppMessenger.show(
-                  widget.name == PlaylistManager.systemFavourites
-                      ? 'Removed from favorites'
-                      : 'Removed from playlist',
-                );
-              },
+                    ? 'Removed from favorites'
+                    : 'Removed from playlist',
+              );
+            },
+          ),
+
+          Divider(
+            height: 1,
+            color: scheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+
+          ListTile(
+            leading: Icon(
+              theme.useGlassTheme
+                  ? CupertinoIcons.xmark_circle
+                  : Icons.cancel_outlined,
             ),
+            title: const Text('Cancel'),
+            onTap: () => Navigator.pop(ctx),
+          ),
 
-            const Divider(height: 1, color: Colors.white12),
-
-            // Cancel
-            ListTile(
-              leading: Icon(
-                theme.useGlassTheme
-                    ? CupertinoIcons.xmark_circle
-                    : Icons.cancel_outlined,
-              ),
-              title: const Text('Cancel'),
-              onTap: () => Navigator.pop(ctx),
-            ),
-
-            SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
-          ],
-        ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
+        ],
       ),
     );
   }
@@ -230,13 +233,16 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
   Widget build(BuildContext context) {
     final player = AudioPlayerService();
     final theme = Provider.of<ThemeProvider>(context);
+    final uiTheme = Theme.of(context);
+    final textTheme = uiTheme.textTheme;
+    final scheme = uiTheme.colorScheme;
     final perfMode = theme.resolvedUiPerformanceMode(context);
     final animateEntries = perfMode == UiPerformanceMode.full;
     final thumbFilterQuality = perfMode == UiPerformanceMode.full
         ? FilterQuality.medium
         : FilterQuality.low;
 
-    return GlassPage(
+    return ThemedPage(
       child: StreamBuilder<Map<String, List<Map<String, dynamic>>>>(
         stream: PlaylistManager.stream,
         builder: (context, snapshot) {
@@ -266,9 +272,8 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       Expanded(
                         child: Text(
                           widget.name,
-                          style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w600,
+                          style: textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -290,14 +295,15 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                   ? CupertinoIcons.music_note_2
                                   : Icons.music_note,
                               size: 64,
-                              color: Colors.white24,
+                              color: scheme.onSurfaceVariant.withValues(
+                                alpha: 0.7,
+                              ),
                             ),
                             const SizedBox(height: 16),
-                            const Text(
+                            Text(
                               'No songs yet',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 16,
+                              style: textTheme.bodyLarge?.copyWith(
+                                color: scheme.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -315,7 +321,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                       animate: animateEntries,
                       child: Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: GlassContainer(
+                        child: ThemedContainer(
                           child: ListTile(
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
@@ -333,7 +339,7 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                                 fallback: Container(
                                   width: 48,
                                   height: 48,
-                                  color: Colors.white12,
+                                  color: scheme.surfaceContainerHighest,
                                   child: const Icon(Icons.music_note, size: 24),
                                 ),
                               ),
@@ -378,11 +384,21 @@ class _PlaylistScreenState extends State<PlaylistScreen> {
                 ],
               ),
 
-              const Positioned(
+              Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: MiniPlayer(),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: ResponsiveLayout.isExpanded(context)
+                          ? 760
+                          : double.infinity,
+                    ),
+                    child: const MiniPlayer(),
+                  ),
+                ),
               ),
             ],
           );

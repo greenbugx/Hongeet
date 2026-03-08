@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/widgets/fallback_network_image.dart';
 import '../../../core/utils/youtube_thumbnail_utils.dart';
-import '../../../core/utils/glass_container.dart';
+import '../../../core/utils/themed_container.dart';
 import '../../../data/models/saavn_song.dart';
 
 class SongCard extends StatelessWidget {
@@ -12,6 +12,8 @@ class SongCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final imageUrl = song.imageUrl.trim();
     final imageScale = YoutubeThumbnailUtils.preferredArtworkScale(
       songId: song.id,
@@ -24,7 +26,7 @@ class SongCard extends StatelessWidget {
       imageUrl: imageUrl,
     );
 
-    return GlassContainer(
+    return ThemedContainer(
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
@@ -53,7 +55,7 @@ class SongCard extends StatelessWidget {
                           alignment: Alignment.center,
                           filterQuality: FilterQuality.medium,
                           fallback: Container(
-                            color: Colors.black26,
+                            color: scheme.surfaceContainerHighest,
                             child: const Icon(
                               Icons.music_note_rounded,
                               size: 40,
@@ -62,7 +64,7 @@ class SongCard extends StatelessWidget {
                         ),
                       )
                     : Container(
-                        color: Colors.black26,
+                        color: scheme.surfaceContainerHighest,
                         child: const Icon(Icons.music_note_rounded, size: 40),
                       ),
               ),
@@ -80,9 +82,8 @@ class SongCard extends StatelessWidget {
                       song.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -90,9 +91,8 @@ class SongCard extends StatelessWidget {
                       song.artists,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white70,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
                   ],

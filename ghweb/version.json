@@ -1,6 +1,6 @@
 {
-  "latest": "v1.6.0+17",
-  "min_supported": "v1.5.1+16",
+  "latest": "v1.7.0+18",
+  "min_supported": "v1.6.0+17",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
-  "notes": "Added lyrics support (synced and unsynced). Added distribution flavors: GitHub/SF keeps first-start update checks while Izzy disables them for policy compliance. Added 2x2 and 4x2 Android music widgets with controls, artwork, and progress. Fixed 3-button navigation bottom-bar sizing/mini-player overlap."
+  "notes": "Material 3 UI refresh with improved spacing and responsive layouts. Dynamic seed-color theming; removed legacy glass mode. Added artist profile with bio, audience, top songs, albums, singles. Search now includes Albums section. Improved navigation and mini-player spacing. Improved YouTube search reliability."
 }
