@@ -40,4 +40,4 @@ This document tracks planned features and quality improvements for upcoming Hong
 
 ## Unstable-Feature Update
 
-- [ ] Discord Rich Presense (will not be included in main release)
+- [ ] Discord Rich Presense
