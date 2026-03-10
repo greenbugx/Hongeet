@@ -11,6 +11,13 @@ import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/app_update_service.dart';
 import '../../core/utils/battery_optimization_handler.dart';
 
+// EXPERIMENTAL DISCORD RPC
+
+import '../../features/experimental/discord_rpc/discord_rpc_adapter.dart';
+import '../../features/experimental/discord_rpc/discord_token_manager.dart';
+import '../../features/experimental/discord_rpc/discord_webview_auth.dart';
+import '../../core/utils/presence_bridge.dart';
+
 class SettingsScreen extends StatefulWidget {
   final ValueChanged<bool>? onMusicServiceChanged;
 
@@ -27,6 +34,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   bool _useYoutubeService = false;
   bool _useSaavnService = false;
+
+  bool _discordRpcEnabled = false;
+  DiscordRpcAdapter? _discordAdapter;
 
   static const _remindAfterDays = 5;
   static const _lastPromptKey = 'battery_prompt_time';
@@ -49,10 +59,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     WidgetsBinding.instance.addObserver(this);
     _checkBattery();
     _loadMusicServicePreference();
+    _loadDiscordRpcPreference();
   }
 
   @override
   void dispose() {
+    _detachDiscordAdapter();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -112,6 +124,66 @@ class _SettingsScreenState extends State<SettingsScreen>
       manufacturer = m;
       showBatteryWarning = true;
     });
+  }
+
+  Future<void> _loadDiscordRpcPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _discordRpcEnabled = prefs.getBool('experimental_discord_rpc') ?? false;
+    });
+    if (_discordRpcEnabled) {
+      _attachDiscordAdapter();
+    }
+  }
+
+  void _attachDiscordAdapter() {
+    _discordAdapter ??= DiscordRpcAdapter();
+    PresenceBridge.instance.addAdapter(_discordAdapter!);
+  }
+
+  void _detachDiscordAdapter() {
+    if (_discordAdapter != null) {
+      PresenceBridge.instance.removeAdapter(_discordAdapter!);
+      _discordAdapter = null;
+    }
+  }
+
+  Future<void> _setDiscordRpcEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (enabled) {
+      // Check whether we already have a token saved
+      final hasToken = await DiscordTokenManager.hasUserToken();
+      if (!hasToken) {
+        // Show WebView auth sheet first and only persist the pref on success
+        if (!mounted) return;
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => DiscordWebViewAuth(
+              onSuccess: () async {
+                Navigator.pop(context);
+                await prefs.setBool('experimental_discord_rpc', true);
+                _attachDiscordAdapter();
+                if (mounted) setState(() => _discordRpcEnabled = true);
+              },
+              onCancel: () => Navigator.pop(context),
+            ),
+          ),
+        );
+        return;
+      }
+      await prefs.setBool('experimental_discord_rpc', true);
+      _attachDiscordAdapter();
+      if (mounted) setState(() => _discordRpcEnabled = true);
+    } else {
+      await prefs.setBool('experimental_discord_rpc', false);
+      _detachDiscordAdapter();
+      await DiscordTokenManager.clearAll();
+      if (mounted) setState(() => _discordRpcEnabled = false);
+    }
   }
 
   Future<void> _loadMusicServicePreference() async {
@@ -364,6 +436,73 @@ class _SettingsScreenState extends State<SettingsScreen>
           },
         );
       },
+    );
+  }
+
+  Widget _buildExperimentalSection(ColorScheme scheme, TextTheme textTheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Row(
+            children: [
+              Icon(Icons.science_outlined, size: 16, color: scheme.tertiary),
+              const SizedBox(width: 6),
+              Text(
+                'Experimental',
+                style: textTheme.labelMedium?.copyWith(
+                  color: scheme.tertiary,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        ThemedContainer(
+          child: Column(
+            children: [
+              SwitchListTile(
+                value: _discordRpcEnabled,
+                onChanged: _setDiscordRpcEnabled,
+                secondary: const Icon(Icons.discord),
+                title: const Text('Discord Rich Presence'),
+                subtitle: Text(
+                  _discordRpcEnabled
+                      ? 'Showing now-playing on your Discord profile'
+                      : 'Show what you\'re listening to on Discord',
+                ),
+              ),
+
+              if (_discordRpcEnabled) ...[
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  dense: true,
+                  leading: Icon(Icons.link_off, size: 20, color: scheme.error),
+                  title: Text(
+                    'Disconnect Discord account',
+                    style: textTheme.bodyMedium?.copyWith(color: scheme.error),
+                  ),
+                  onTap: () => _setDiscordRpcEnabled(false),
+                ),
+              ],
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Text(
+                  '⚠ This feature may stop working at any time without prior notice! Please disable it if not in use.',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -655,6 +794,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
           ),
 
+          const SizedBox(height: 12),
+
+          _buildExperimentalSection(scheme, textTheme),
           const SizedBox(height: 80),
         ],
       ),

@@ -1235,6 +1235,8 @@ class AudioPlayerService {
   }
 
   bool get isPlaying => _player.playing;
+  Duration get position => _player.position;
+  Duration? get duration => _player.duration;
 
   Map<String, dynamic> getCacheStats() {
     final now = DateTime.now();
