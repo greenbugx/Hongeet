@@ -3,116 +3,125 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:clipToOutline="true"
+    android:outlineProvider="background"
     android:background="@drawable/widget_bg">
 
+    
     <ImageView
         android:id="@+id/widget_bg_art"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:alpha="0.16"
-        android:contentDescription="Background artwork"
+        android:contentDescription="@null"
         android:scaleType="centerCrop"
         android:visibility="gone" />
 
+    
     <ImageView
-        android:id="@+id/widget_bg_scrim"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#6E070A11" />
+        android:background="@drawable/widget_bottom_scrim"
+        android:contentDescription="@null" />
 
+    
+    
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center_vertical"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:paddingLeft="10dp"
-        android:paddingTop="10dp"
-        android:paddingRight="10dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="58dp"
         android:paddingBottom="10dp">
 
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Not playing"
+            android:textColor="#F2FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_artist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Hongeet"
+            android:textColor="#99FFFFFF"
+            android:textSize="11sp" />
+
+        <ProgressBar
+            android:id="@+id/widget_progress_playing"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="8dp"
+            android:max="1000"
+            android:progress="0"
+            android:progressDrawable="@drawable/widget_progress_playing" />
+
+        <ProgressBar
+            android:id="@+id/widget_progress_paused"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="8dp"
+            android:max="1000"
+            android:progress="0"
+            android:progressDrawable="@drawable/widget_progress_paused"
+            android:visibility="gone" />
+
+        
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/widget_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="Not playing"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/widget_artist"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="Hongeet"
-                    android:textColor="#CFE1EAFF"
-                    android:textSize="11sp" />
-            </LinearLayout>
-
-            <ImageView
-                android:id="@+id/widget_cover"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="@android:color/transparent"
-                android:contentDescription="Cover"
-                android:scaleType="centerCrop"
-                android:src="@mipmap/ic_launcher" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center"
             android:orientation="horizontal">
 
             <ImageButton
                 android:id="@+id/widget_btn_prev"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:background="@drawable/widget_control_bg"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@android:color/transparent"
                 android:contentDescription="Previous"
-                android:padding="5dp"
-                android:src="@android:drawable/ic_media_previous"
-                android:tint="#FFFFFFFF" />
+                android:padding="4dp"
+                android:src="@android:drawable/ic_media_previous" />
 
-            <ImageButton
-                android:id="@+id/widget_btn_play_pause"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:background="@drawable/widget_control_bg"
-                android:contentDescription="Play or pause"
-                android:padding="6dp"
-                android:src="@android:drawable/ic_media_play"
-                android:tint="#FFFFFFFF" />
+            <ImageView
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:contentDescription="@null" />
 
             <ImageButton
                 android:id="@+id/widget_btn_next"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:background="@drawable/widget_control_bg"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="@android:color/transparent"
                 android:contentDescription="Next"
-                android:padding="5dp"
-                android:src="@android:drawable/ic_media_next"
-                android:tint="#FFFFFFFF" />
+                android:padding="4dp"
+                android:src="@android:drawable/ic_media_next" />
+
         </LinearLayout>
     </LinearLayout>
+
+    
+    <ImageButton
+        android:id="@+id/widget_btn_play_pause"
+        android:layout_width="40dp"
+        android:layout_height="68dp"
+        android:layout_gravity="end|center_vertical"
+        android:layout_marginEnd="10dp"
+        android:background="@drawable/widget_play_pill"
+        android:contentDescription="Play or pause"
+        android:padding="10dp"
+        android:src="@android:drawable/ic_media_play" />
+
 </FrameLayout>
