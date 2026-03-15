@@ -71,8 +71,8 @@ Hongeet is a music player that supports **offline local audio playback** and **o
 ---
 
 <h2 align=center> 📸 Screenshots </h2>
-
 <div align="center">
+  <h2 style="">Android</h2>
   <table>
     <tr>
       <td><img src="assets/screenshots/01.jpg" width="220" /></td>
@@ -90,11 +90,20 @@ Hongeet is a music player that supports **offline local audio playback** and **o
       <td><img src="assets/screenshots/09.jpg" width="220" /></td>
     </tr>
   </table>
+  <h2 style="">Windows</h2>
+  <table>
+    <tr>
+      <td><img src="assets/screenshots/10.png"/></td>
+    </tr>
+    <tr>
+      <td><img src="assets/screenshots/11.png"/></td>
+    </tr>
+  </table>
 </div>
 
 ---
 
-## 🔐 Permissions
+## 🔐 Permissions (Android)
 
 HONGEET asks for permissions strictly needed for playback, downloads, and local media access.
 
@@ -134,6 +143,7 @@ This project wouldn’t exist without these amazing open-source libraries:
 * **[youtube_explode_dart](https://pub.dev/packages/youtube_explode_dart)** — YouTube stream extraction in pure Dart  
 * **[JioSaavn API (Unofficial)](https://saavn.sumit.co/)** — Metadata & streaming access from JioSaavn
 * **[LRCLib](https://lrclib.net/)** — Synchronized lyrics support along with clean display of Unsynchronized lyrics
+* **[dart_discord_presence](https://pub.dev/packages/dart_discord_presence)** — DiscordRPC(windows)
 
 ---
 

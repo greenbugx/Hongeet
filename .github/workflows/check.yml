@@ -13,6 +13,7 @@ on:
       - 'SECURITY.md'
       - 'fastlane/**'
       - '.github/workflows/pages-ghweb.yml'
+      - '.github/workflows/windows.yml'
       - 'ghweb/**'
       - 'assets/**'
   pull_request:
@@ -28,6 +29,7 @@ on:
       - 'SECURITY.md'
       - 'fastlane/**'
       - '.github/workflows/pages-ghweb.yml'
+      - '.github/workflows/windows.yml'
       - 'ghweb/**'
       - 'assets/**'
 
