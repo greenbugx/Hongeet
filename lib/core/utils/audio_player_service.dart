@@ -49,7 +49,7 @@ class AudioPlayerService {
     PlaylistManager.load();
   }
 
-  final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer _player = AudioPlayer(useProxyForRequestHeaders: false);
   AudioPlayer get player => _player;
 
   List<QueuedSong> _queue = [];

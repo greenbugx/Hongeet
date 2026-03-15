@@ -16,6 +16,7 @@ import 'package:hongit/features/search/chart_songs_screen.dart';
 import 'package:hongit/features/library/local_audio_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/utils/themed_container.dart';
 import '../../core/utils/themed_page.dart';
@@ -35,6 +36,7 @@ class _SearchScreenState extends State<SearchScreen>
   final ScrollController _scrollController = ScrollController();
   final ScrollController _chartsScrollController = ScrollController();
   final ScrollController _albumsScrollController = ScrollController();
+  final ScrollController _searchAlbumsScrollController = ScrollController();
   Future<List<SaavnSong>>? _searchFuture;
   Future<List<YtmAlbum>>? _albumSearchFuture;
   String _lastQuery = '';
@@ -49,8 +51,8 @@ class _SearchScreenState extends State<SearchScreen>
   static const int _chartsTargetCount = 10;
   static const int _albumsTargetCount = 10;
   static const int _trendingSongsTargetCount = 12;
-  static const double _chartsSectionBodyHeight = 240;
-  static const double _albumsSectionBodyHeight = 240;
+  static const double _mobileSectionBodyHeight = 240;
+  static const double _desktopSectionBodyHeight = 286;
   static const List<String> _trendingSongsQueries = <String>[
     'trending in shorts',
     'latest singles',
@@ -100,6 +102,12 @@ class _SearchScreenState extends State<SearchScreen>
     'tik tok',
     'tiktok',
   ];
+
+  double _sectionBodyHeightFor(BuildContext context) {
+    return ResponsiveLayout.isExpanded(context)
+        ? _desktopSectionBodyHeight
+        : _mobileSectionBodyHeight;
+  }
 
   static const int minSearchLength = 2;
 
@@ -983,6 +991,7 @@ class _SearchScreenState extends State<SearchScreen>
   void dispose() {
     _chartsScrollController.dispose();
     _albumsScrollController.dispose();
+    _searchAlbumsScrollController.dispose();
     _scrollController.dispose();
     _controller.dispose();
     _debounce?.cancel();
@@ -1000,7 +1009,6 @@ class _SearchScreenState extends State<SearchScreen>
     final textTheme = theme.textTheme;
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final smoothMode = perfMode == UiPerformanceMode.smooth;
-    final animateSectionHeader = perfMode == UiPerformanceMode.full;
 
     if (!_servicesReady) {
       return const ThemedPage(
@@ -1031,48 +1039,67 @@ class _SearchScreenState extends State<SearchScreen>
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 20)),
-            SliverToBoxAdapter(
-              child: SearchBar(
-                controller: _controller,
-                hintText: isLocalMode
-                    ? 'Search local audio...'
-                    : 'Search songs, artists...',
-                leading: const Icon(Icons.search),
-                onChanged: _onSearchChanged,
-                trailing: _controller.text.isEmpty
-                    ? null
-                    : [
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () {
-                            _controller.clear();
-                            _onSearchChanged('');
-                          },
-                        ),
-                      ],
+            if (!kIsWeb &&
+                defaultTargetPlatform == TargetPlatform.windows &&
+                ResponsiveLayout.isExpanded(context))
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _StickySearchBarDelegate(
+                  height: 56 + 28,
+                  child: SearchBar(
+                    controller: _controller,
+                    hintText: isLocalMode
+                        ? 'Search local audio...'
+                        : 'Search songs, artists...',
+                    leading: const Icon(Icons.search),
+                    onChanged: _onSearchChanged,
+                    trailing: _controller.text.isEmpty
+                        ? null
+                        : [
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () {
+                                _controller.clear();
+                                _onSearchChanged('');
+                              },
+                            ),
+                          ],
+                  ),
+                ),
+              )
+            else ...[
+              SliverToBoxAdapter(
+                child: SearchBar(
+                  controller: _controller,
+                  hintText: isLocalMode
+                      ? 'Search local audio...'
+                      : 'Search songs, artists...',
+                  leading: const Icon(Icons.search),
+                  onChanged: _onSearchChanged,
+                  trailing: _controller.text.isEmpty
+                      ? null
+                      : [
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () {
+                              _controller.clear();
+                              _onSearchChanged('');
+                            },
+                          ),
+                        ],
+                ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+              const SliverToBoxAdapter(child: SizedBox(height: 28)),
+            ],
 
             if (!isLocalMode || isSearching) ...[
               SliverToBoxAdapter(
-                child: animateSectionHeader
-                    ? AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 200),
-                        child: Text(
-                          headerText,
-                          key: ValueKey(headerText),
-                          style: textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    : Text(
-                        headerText,
-                        style: textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                child: Text(
+                  headerText,
+                  style: textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 16)),
             ],
@@ -1110,13 +1137,13 @@ class _SearchScreenState extends State<SearchScreen>
               _buildSectionLoadingPlaceholder(
                 context,
                 title: 'Charts',
-                height: _chartsSectionBodyHeight,
+                height: _sectionBodyHeightFor(context),
                 topPadding: 0,
               ),
               _buildSectionLoadingPlaceholder(
                 context,
                 title: 'Trending Albums',
-                height: _albumsSectionBodyHeight,
+                height: _sectionBodyHeightFor(context),
                 topPadding: 24,
               ),
               _buildSectionLoadingPlaceholder(
@@ -1190,27 +1217,14 @@ class _SearchScreenState extends State<SearchScreen>
     required double topPadding,
   }) {
     final textTheme = Theme.of(context).textTheme;
-    final perfMode = Provider.of<ThemeProvider>(
-      context,
-      listen: false,
-    ).resolvedUiPerformanceMode(context);
-    final fullMode = perfMode == UiPerformanceMode.full;
     return Padding(
       padding: EdgeInsets.only(top: topPadding),
       child: Column(
-        crossAxisAlignment: fullMode
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: Text(
-              title,
-              textAlign: fullMode ? TextAlign.center : TextAlign.start,
-              style: textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          Text(
+            title,
+            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 16),
           if (height == null)
@@ -1235,38 +1249,22 @@ class _SearchScreenState extends State<SearchScreen>
     final textTheme = theme.textTheme;
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final smoothMode = perfMode == UiPerformanceMode.smooth;
-    final fullMode = perfMode == UiPerformanceMode.full;
     final cardWidth = ResponsiveLayout.isExpanded(context) ? 210.0 : 170.0;
+    final sectionHeight = _sectionBodyHeightFor(context);
 
     return Column(
-      crossAxisAlignment: fullMode
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: double.infinity,
-          child: fullMode
-              ? AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    'Charts',
-                    key: const ValueKey('charts_full'),
-                    textAlign: TextAlign.center,
-                    style: textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                )
-              : Text(
-                  'Charts',
-                  style: textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+        _SectionHeaderWithArrows(
+          title: 'Charts',
+          titleStyle: textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+          controller: _chartsScrollController,
         ),
         const SizedBox(height: 16),
         SizedBox(
-          height: _chartsSectionBodyHeight,
+          height: sectionHeight,
           child: charts.isEmpty
               ? Center(
                   child: Text(
@@ -1403,41 +1401,24 @@ class _SearchScreenState extends State<SearchScreen>
     final textTheme = theme.textTheme;
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);
     final smoothMode = perfMode == UiPerformanceMode.smooth;
-    final fullMode = perfMode == UiPerformanceMode.full;
     final cardWidth = ResponsiveLayout.isExpanded(context) ? 210.0 : 170.0;
+    final sectionHeight = _sectionBodyHeightFor(context);
 
     return Padding(
       padding: const EdgeInsets.only(top: 24),
       child: Column(
-        crossAxisAlignment: fullMode
-            ? CrossAxisAlignment.center
-            : CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: double.infinity,
-            child: fullMode
-                ? AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: const Text(
-                      'Trending Albums',
-                      key: ValueKey('albums_full'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  )
-                : Text(
-                    'Trending Albums',
-                    style: textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+          _SectionHeaderWithArrows(
+            title: 'Trending Albums',
+            titleStyle: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            controller: _albumsScrollController,
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: _albumsSectionBodyHeight,
+            height: sectionHeight,
             child: albums.isEmpty
                 ? Center(
                     child: Text(
@@ -1982,10 +1963,11 @@ class _SearchScreenState extends State<SearchScreen>
     final scheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     final cardWidth = ResponsiveLayout.isExpanded(context) ? 210.0 : 172.0;
+    final sectionHeight = _sectionBodyHeightFor(context);
 
     if (loading) {
       return SizedBox(
-        height: _albumsSectionBodyHeight,
+        height: sectionHeight,
         child: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -2001,11 +1983,11 @@ class _SearchScreenState extends State<SearchScreen>
     }
 
     return SizedBox(
-      height: _albumsSectionBodyHeight,
+      height: sectionHeight,
       child: ListView.separated(
         key: const PageStorageKey<String>('search_screen_albums_query_row'),
         scrollDirection: Axis.horizontal,
-        controller: _albumsScrollController,
+        controller: _searchAlbumsScrollController,
         padding: const EdgeInsets.only(right: 2, bottom: 8),
         itemCount: albums.length,
         separatorBuilder: (_, _) => const SizedBox(width: 14),
@@ -2320,11 +2302,12 @@ class _SearchScreenState extends State<SearchScreen>
                   const SizedBox(height: 26),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Albums',
-                      style: theme.textTheme.titleLarge?.copyWith(
+                    child: _SectionHeaderWithArrows(
+                      title: 'Albums',
+                      titleStyle: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
+                      controller: _searchAlbumsScrollController,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -2443,4 +2426,124 @@ class _AutoMarqueeText extends StatelessWidget {
       },
     );
   }
+}
+
+class _SectionHeaderWithArrows extends StatelessWidget {
+  final String title;
+  final TextStyle? titleStyle;
+  final ScrollController controller;
+  final double scrollAmount;
+
+  const _SectionHeaderWithArrows({
+    required this.title,
+    required this.controller,
+    this.titleStyle,
+    this.scrollAmount = 620,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isWindows =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+    return Row(
+      children: [
+        Expanded(child: Text(title, style: titleStyle)),
+        if (isWindows && ResponsiveLayout.isExpanded(context)) ...[
+          const SizedBox(width: 8),
+          _ScrollArrowButton(
+            icon: Icons.chevron_left_rounded,
+            onPressed: () {
+              if (!controller.hasClients) return;
+              final target = (controller.offset - scrollAmount).clamp(
+                0.0,
+                controller.position.maxScrollExtent,
+              );
+              controller.animateTo(
+                target,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+              );
+            },
+          ),
+          const SizedBox(width: 4),
+          _ScrollArrowButton(
+            icon: Icons.chevron_right_rounded,
+            onPressed: () {
+              if (!controller.hasClients) return;
+              final target = (controller.offset + scrollAmount).clamp(
+                0.0,
+                controller.position.maxScrollExtent,
+              );
+              controller.animateTo(
+                target,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScrollArrowButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _ScrollArrowButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.92),
+      elevation: 2,
+      shadowColor: scheme.shadow.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Icon(icon, size: 18, color: scheme.onSurface),
+        ),
+      ),
+    );
+  }
+}
+
+class _StickySearchBarDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+  final double height;
+
+  const _StickySearchBarDelegate({required this.child, required this.height});
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: Theme.of(context).colorScheme.surface,
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Align(alignment: Alignment.bottomCenter, child: child),
+    );
+  }
+
+  @override
+  double get maxExtent => height;
+  @override
+  double get minExtent => height;
+  @override
+  bool shouldRebuild(_StickySearchBarDelegate old) => old.child != child;
 }

@@ -3,7 +3,7 @@
 This document tracks planned features and quality improvements for upcoming Hongeet releases.
 
 > [!NOTE]
-> Last updated: 08-03-2026 - 08:37 PM IST
+> Last updated: 16-03-2026 - 12:32 AM IST
 
 ---
 
@@ -40,4 +40,4 @@ This document tracks planned features and quality improvements for upcoming Hong
 
 ## Unstable-Feature Update
 
-- [ ] Discord Rich Presense
+- [x] Discord Rich Presense

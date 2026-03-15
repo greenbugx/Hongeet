@@ -17,6 +17,7 @@ import '../../data/api/local_backend_api.dart';
 import '../../data/api/lrclib_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../core/utils/app_messenger.dart';
+import '../../core/utils/download_path_helper.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/responsive.dart';
 import '../../core/utils/youtube_thumbnail_utils.dart';
@@ -334,10 +335,11 @@ class FullPlayerSheet extends StatelessWidget {
       try {
         if (song.id.startsWith('yt:')) {
           final videoId = song.id.substring(3);
-          final audioUrl = await YoutubeSongApi.fetchBestStreamUrl(videoId);
+          final extracted = await YoutubeSongApi.fetchBestStream(videoId);
           await LocalBackendApi.downloadDirect(
             title: song.meta.title,
-            url: audioUrl,
+            url: extracted.url,
+            headers: extracted.headers,
           );
         } else {
           await LocalBackendApi.downloadSaavn(
@@ -361,9 +363,7 @@ class FullPlayerSheet extends StatelessWidget {
 
   bool _isDownloadedLocalTrack(QueuedSong? song) {
     if (song == null || !song.isLocal) return false;
-    final normalizedPath = song.id.replaceAll('\\', '/').toLowerCase();
-    return normalizedPath.startsWith('/storage/emulated/0/download/hongit/') ||
-        normalizedPath.startsWith('/storage/emulated/0/downloads/hongit/');
+    return DownloadPathHelper.isDownloadedPath(song.id);
   }
 
   bool _isLocalAudio(QueuedSong? song) {

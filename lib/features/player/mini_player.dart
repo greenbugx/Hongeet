@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:hongit/core/theme/app_theme.dart';
 import 'package:marquee/marquee.dart';
@@ -14,8 +15,19 @@ class MiniPlayer extends StatelessWidget {
 
   const MiniPlayer({super.key, this.embeddedInBottomBar = false});
 
+  bool get _isDesktopPlatform {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isDesktopPlatform) {
+      return const SizedBox.shrink();
+    }
+
     final player = AudioPlayerService();
     final themeProvider = Provider.of<ThemeProvider>(context);
     final perfMode = themeProvider.resolvedUiPerformanceMode(context);

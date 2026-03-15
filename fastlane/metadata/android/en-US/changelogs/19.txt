@@ -1,0 +1,5 @@
+- New Windows Version is available
+- Added DiscordRPC feature(experimental - Uses OAuth for Android & Discord IPC for windows)
+- Fixed some minor bugs
+- Added new circle widget(for Android)
+- Redesigned 2x2 & 4x2 widgets

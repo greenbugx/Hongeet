@@ -6,6 +6,12 @@ class AppDistribution {
   static const _izzyFlavor = 'izzy';
 
   static Future<bool> isStartupUpdateCheckEnabled() async {
+    if (kIsWeb) return false;
+
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return true;
+    }
+
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
       return true;
     }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hongit/features/settings/about_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,7 @@ import '../../core/utils/battery_optimization_handler.dart';
 // EXPERIMENTAL DISCORD RPC
 
 import '../../features/experimental/discord_rpc/discord_rpc_adapter.dart';
+import '../../features/experimental/discord_rpc/discord_ipc_adapter.dart';
 import '../../features/experimental/discord_rpc/discord_token_manager.dart';
 import '../../features/experimental/discord_rpc/discord_webview_auth.dart';
 import '../../core/utils/presence_bridge.dart';
@@ -36,7 +38,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   bool _useSaavnService = false;
 
   bool _discordRpcEnabled = false;
-  DiscordRpcAdapter? _discordAdapter;
+  static PresenceAdapter? _discordAdapter;
 
   static const _remindAfterDays = 5;
   static const _lastPromptKey = 'battery_prompt_time';
@@ -53,6 +55,21 @@ class _SettingsScreenState extends State<SettingsScreen>
     Color(0xFFFDD835),
   ];
 
+  bool get _supportsEmbeddedDiscordAuth {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.windows;
+  }
+
+  bool get _isDesktopPlatform {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,7 +81,7 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   @override
   void dispose() {
-    _detachDiscordAdapter();
+    // _detachDiscordAdapter();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -132,13 +149,25 @@ class _SettingsScreenState extends State<SettingsScreen>
     setState(() {
       _discordRpcEnabled = prefs.getBool('experimental_discord_rpc') ?? false;
     });
+    if (_discordRpcEnabled && !_supportsEmbeddedDiscordAuth) {
+      await prefs.setBool('experimental_discord_rpc', false);
+      if (!mounted) return;
+      setState(() => _discordRpcEnabled = false);
+      return;
+    }
     if (_discordRpcEnabled) {
       _attachDiscordAdapter();
     }
   }
 
   void _attachDiscordAdapter() {
-    _discordAdapter ??= DiscordRpcAdapter();
+    if (_discordAdapter == null) {
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        _discordAdapter = DiscordIpcAdapter();
+      } else {
+        _discordAdapter = DiscordRpcAdapter();
+      }
+    }
     PresenceBridge.instance.addAdapter(_discordAdapter!);
   }
 
@@ -153,28 +182,58 @@ class _SettingsScreenState extends State<SettingsScreen>
     final prefs = await SharedPreferences.getInstance();
 
     if (enabled) {
-      // Check whether we already have a token saved
-      final hasToken = await DiscordTokenManager.hasUserToken();
-      if (!hasToken) {
-        // Show WebView auth sheet first and only persist the pref on success
+      // Windows uses IPC
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+        await prefs.setBool('experimental_discord_rpc', true);
+        _attachDiscordAdapter();
+        if (mounted) setState(() => _discordRpcEnabled = true);
+        return;
+      }
+
+      // Android need WebView auth
+      if (kIsWeb ||
+          (defaultTargetPlatform != TargetPlatform.android &&
+              defaultTargetPlatform != TargetPlatform.iOS &&
+              defaultTargetPlatform != TargetPlatform.macOS)) {
         if (!mounted) return;
-        await Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-            fullscreenDialog: true,
-            builder: (_) => DiscordWebViewAuth(
-              onSuccess: () async {
-                Navigator.pop(context);
-                await prefs.setBool('experimental_discord_rpc', true);
-                _attachDiscordAdapter();
-                if (mounted) setState(() => _discordRpcEnabled = true);
-              },
-              onCancel: () => Navigator.pop(context),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Discord RPC is supported on Android, iOS, macOS, and Windows.',
             ),
           ),
         );
         return;
       }
+
+      final hasToken = await DiscordTokenManager.hasUserToken();
+      if (!hasToken) {
+        if (!mounted) return;
+
+        void onAuthSuccess() async {
+          if (Navigator.canPop(context)) Navigator.pop(context);
+          await prefs.setBool('experimental_discord_rpc', true);
+          _attachDiscordAdapter();
+          if (mounted) setState(() => _discordRpcEnabled = true);
+        }
+
+        void onAuthCancel() {
+          if (Navigator.canPop(context)) Navigator.pop(context);
+        }
+
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+            fullscreenDialog: true,
+            builder: (_) => DiscordWebViewAuth(
+              onSuccess: onAuthSuccess,
+              onCancel: onAuthCancel,
+            ),
+          ),
+        );
+        return;
+      }
+
       await prefs.setBool('experimental_discord_rpc', true);
       _attachDiscordAdapter();
       if (mounted) setState(() => _discordRpcEnabled = true);
@@ -440,6 +499,14 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Widget _buildExperimentalSection(ColorScheme scheme, TextTheme textTheme) {
+    // Determine if Discord auth is supported on this platform
+    final bool supportsDiscordAuth =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.windows);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -466,12 +533,17 @@ class _SettingsScreenState extends State<SettingsScreen>
             children: [
               SwitchListTile(
                 value: _discordRpcEnabled,
-                onChanged: _setDiscordRpcEnabled,
+                onChanged: supportsDiscordAuth ? _setDiscordRpcEnabled : null,
                 secondary: const Icon(Icons.discord),
                 title: const Text('Discord Rich Presence'),
                 subtitle: Text(
-                  _discordRpcEnabled
+                  !supportsDiscordAuth
+                      ? 'Discord in-app auth is currently supported on Android/iOS/macOS/Windows.'
+                      : _discordRpcEnabled
                       ? 'Showing now-playing on your Discord profile'
+                      : (!kIsWeb &&
+                            defaultTargetPlatform == TargetPlatform.windows)
+                      ? 'Show what you\'re listening to on Discord (requires Discord running)'
                       : 'Show what you\'re listening to on Discord',
                 ),
               ),
@@ -634,34 +706,36 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          ThemedContainer(
-            child: ListTile(
-              leading: const Icon(Icons.speed),
-              title: const Text('UI performance'),
-              subtitle: Text(_uiPerformanceHint(themeProvider, context)),
-              trailing: DropdownButtonHideUnderline(
-                child: DropdownButton<UiPerformanceMode>(
-                  value: themeProvider.uiPerformanceMode,
-                  isDense: true,
-                  onChanged: (mode) {
-                    if (mode != null) {
-                      themeProvider.setUiPerformanceMode(mode);
-                    }
-                  },
-                  items: UiPerformanceMode.values
-                      .map(
-                        (mode) => DropdownMenuItem<UiPerformanceMode>(
-                          value: mode,
-                          child: Text(_uiPerformanceLabel(mode)),
-                        ),
-                      )
-                      .toList(),
+          if (!_isDesktopPlatform) ...[
+            ThemedContainer(
+              child: ListTile(
+                leading: const Icon(Icons.speed),
+                title: const Text('UI performance'),
+                subtitle: Text(_uiPerformanceHint(themeProvider, context)),
+                trailing: DropdownButtonHideUnderline(
+                  child: DropdownButton<UiPerformanceMode>(
+                    value: themeProvider.uiPerformanceMode,
+                    isDense: true,
+                    onChanged: (mode) {
+                      if (mode != null) {
+                        themeProvider.setUiPerformanceMode(mode);
+                      }
+                    },
+                    items: UiPerformanceMode.values
+                        .map(
+                          (mode) => DropdownMenuItem<UiPerformanceMode>(
+                            value: mode,
+                            child: Text(_uiPerformanceLabel(mode)),
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
               ),
             ),
-          ),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
 
           ThemedContainer(
             child: ListTile(
@@ -694,21 +768,23 @@ class _SettingsScreenState extends State<SettingsScreen>
 
           const SizedBox(height: 12),
 
-          ThemedContainer(
-            child: SwitchListTile(
-              value: themeProvider.dataSaverEnabled,
-              onChanged: (enabled) {
-                themeProvider.setDataSaverEnabled(enabled);
-              },
-              secondary: const Icon(Icons.data_saver_on),
-              title: const Text('Data Saver'),
-              subtitle: Text(
-                _dataSaverDescription(themeProvider.dataSaverEnabled),
+          if (!_isDesktopPlatform) ...[
+            ThemedContainer(
+              child: SwitchListTile(
+                value: themeProvider.dataSaverEnabled,
+                onChanged: (enabled) {
+                  themeProvider.setDataSaverEnabled(enabled);
+                },
+                secondary: const Icon(Icons.data_saver_on),
+                title: const Text('Data Saver'),
+                subtitle: Text(
+                  _dataSaverDescription(themeProvider.dataSaverEnabled),
+                ),
               ),
             ),
-          ),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
 
           ThemedContainer(
             child: SwitchListTile(

@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import '../../core/utils/download_path_helper.dart';
 import '../../core/utils/app_logger.dart';
 
 class DownloadedSong {
@@ -23,19 +24,24 @@ class DownloadedSongsProvider {
   }
 
   static Future<List<DownloadedSong>> load() async {
-    final dir = Directory('/storage/emulated/0/Download/Hongeet');
+    final directories = DownloadPathHelper.candidateDirectories();
+    if (directories.isEmpty) return [];
 
-    if (!await dir.exists()) return [];
     try {
       final files = <File>[];
-      await for (final entity in dir.list(
-        recursive: false,
-        followLinks: false,
-      )) {
-        if (entity is! File) continue;
-        final ext = p.extension(entity.path).toLowerCase();
-        if (!['.mp3', '.m4a', '.webm'].contains(ext)) continue;
-        files.add(entity);
+      for (final dir in directories) {
+        if (!await dir.exists()) continue;
+        await for (final entity in dir.list(
+          recursive: false,
+          followLinks: false,
+        )) {
+          if (entity is! File) continue;
+          final ext = p.extension(entity.path).toLowerCase();
+          if (!['.mp3', '.m4a', '.webm', '.ogg', '.aac'].contains(ext)) {
+            continue;
+          }
+          files.add(entity);
+        }
       }
 
       return files

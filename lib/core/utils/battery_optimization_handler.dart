@@ -17,7 +17,9 @@ class BatteryOptimizationHelper {
   }
 
   static Future<String> getManufacturer() async {
-    return await _channel.invokeMethod('manufacturer');
+    if (!Platform.isAndroid) return 'unknown';
+    final value = await _channel.invokeMethod<String>('manufacturer');
+    return (value == null || value.trim().isEmpty) ? 'unknown' : value;
   }
 
   static bool isAggressiveOEM(String m) {

@@ -1,0 +1,45 @@
+name: "Build and Release (Windows)"
+
+on:
+  workflow_dispatch:
+    branches: main
+
+jobs:
+  build-windows:
+    name: Build and Release (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.38.7'
+          channel: 'stable'
+
+      - name: Get Flutter Dependencies
+        run: flutter pub get
+
+      - name: Extract version from pubspec.yaml
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:').Line.Split(' ')[1].Split('+')[0]
+          echo "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Zip Windows build
+        shell: pwsh
+        run: |
+          $src = "build\windows\x64\runner\Release"
+          $dst = "hongeet_v${{ env.VERSION }}_windows.zip"
+          Compress-Archive -Path "$src\*" -DestinationPath $dst
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Release-Windows
+          path: hongeet_v${{ env.VERSION }}_windows.zip

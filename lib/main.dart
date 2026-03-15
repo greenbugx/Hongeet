@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/theme/app_theme.dart';
@@ -6,6 +7,7 @@ import 'core/utils/data_saver_settings.dart';
 import 'core/utils/streaming_preferences.dart';
 import 'core/utils/permission_manager.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'core/utils/background_audio_handler.dart';
 import 'core/utils/presence_bridge.dart';
 import 'package:app_links/app_links.dart';
@@ -16,6 +18,16 @@ Future<void> main() async {
   await DataSaverSettings.init();
   await StreamingPreferences.load();
   await PermissionManager.requestStartupPermissions();
+
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+    JustAudioMediaKit.ensureInitialized(
+      windows: true,
+      linux: false,
+      android: false,
+      iOS: false,
+      macOS: false,
+    );
+  }
 
   await AudioService.init(
     builder: () => BackgroundAudioHandler(),

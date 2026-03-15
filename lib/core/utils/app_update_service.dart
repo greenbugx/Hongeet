@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
@@ -60,9 +61,15 @@ class AppUpdateService {
         .toString()
         .trim();
     final apkUrl = (decoded['apk_url'] ?? '').toString().trim();
+    final winUrl = (decoded['win_url'] ?? '').toString().trim();
     final notes = (decoded['notes'] ?? '').toString().trim();
 
-    if (latestLabel.isEmpty || apkUrl.isEmpty) {
+    final downloadUrl =
+        (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+        ? winUrl
+        : apkUrl;
+
+    if (latestLabel.isEmpty || downloadUrl.isEmpty) {
       throw StateError('Missing update data.');
     }
 
@@ -82,7 +89,7 @@ class AppUpdateService {
       minSupportedLabel: minSupportedLabel.isEmpty
           ? latestLabel
           : minSupportedLabel,
-      apkUrl: apkUrl,
+      apkUrl: downloadUrl,
       notes: notes,
     );
   }

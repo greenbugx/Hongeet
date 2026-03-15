@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -32,10 +33,20 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
   Future<YtmArtistProfile>? _profileFuture;
   bool _bioExpanded = false;
 
+  final ScrollController _albumsScrollController = ScrollController();
+  final ScrollController _singlesScrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _albumsScrollController.dispose();
+    _singlesScrollController.dispose();
+    super.dispose();
   }
 
   void _loadProfile({bool forceRefresh = false}) {
@@ -104,20 +115,25 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
     required List<YtmAlbum> releases,
     required String headerTitle,
     required String artistName,
+    required ScrollController scrollController,
   }) {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
     final scheme = theme.colorScheme;
     final cardWidth = ResponsiveLayout.isExpanded(context) ? 210.0 : 172.0;
+    final cardHeight = cardWidth + 62.0;
 
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+          _SectionHeaderWithArrows(
+            title: title,
+            titleStyle: textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            controller: scrollController,
           ),
           const SizedBox(height: 12),
           if (releases.isEmpty)
@@ -132,8 +148,9 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             )
           else
             SizedBox(
-              height: 238,
+              height: cardHeight + 8,
               child: ListView.separated(
+                controller: scrollController,
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.only(right: 2, bottom: 8),
                 itemCount: releases.length,
@@ -163,6 +180,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
 
                   return SizedBox(
                     width: cardWidth,
+                    height: cardHeight,
                     child: RepaintBoundary(
                       child: ThemedContainer(
                         borderRadius: BorderRadius.circular(18),
@@ -604,6 +622,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                         releases: profile.albums,
                         headerTitle: 'Albums',
                         artistName: profile.name,
+                        scrollController: _albumsScrollController,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -615,6 +634,7 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
                         releases: profile.singlesAndEps,
                         headerTitle: 'Singles & EPs',
                         artistName: profile.name,
+                        scrollController: _singlesScrollController,
                       ),
                     ),
                   ],
@@ -639,6 +659,99 @@ class _ArtistProfileScreenState extends State<ArtistProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SectionHeaderWithArrows extends StatelessWidget {
+  final String title;
+  final TextStyle? titleStyle;
+  final ScrollController controller;
+  final double scrollAmount;
+
+  const _SectionHeaderWithArrows({
+    required this.title,
+    required this.controller,
+    this.titleStyle,
+    this.scrollAmount = 620,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isWindows =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+
+    return Row(
+      children: [
+        Expanded(child: Text(title, style: titleStyle)),
+        if (isWindows && ResponsiveLayout.isExpanded(context)) ...[
+          const SizedBox(width: 8),
+          _ScrollArrowButton(
+            icon: Icons.chevron_left_rounded,
+            onPressed: () {
+              if (!controller.hasClients) return;
+              final target = (controller.offset - scrollAmount).clamp(
+                0.0,
+                controller.position.maxScrollExtent,
+              );
+              controller.animateTo(
+                target,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+              );
+            },
+          ),
+          const SizedBox(width: 4),
+          _ScrollArrowButton(
+            icon: Icons.chevron_right_rounded,
+            onPressed: () {
+              if (!controller.hasClients) return;
+              final target = (controller.offset + scrollAmount).clamp(
+                0.0,
+                controller.position.maxScrollExtent,
+              );
+              controller.animateTo(
+                target,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutCubic,
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ScrollArrowButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _ScrollArrowButton({required this.icon, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest.withValues(alpha: 0.92),
+      elevation: 2,
+      shadowColor: scheme.shadow.withValues(alpha: 0.14),
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+          ),
+          child: Icon(icon, size: 18, color: scheme.onSurface),
+        ),
       ),
     );
   }

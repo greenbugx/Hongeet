@@ -1,6 +1,7 @@
 {
-  "latest": "v1.7.0+18",
-  "min_supported": "v1.6.0+17",
+  "latest": "v1.8.0+19",
+  "min_supported": "v1.7.0+18",
   "apk_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
-  "notes": "Material 3 UI refresh with improved spacing and responsive layouts. Dynamic seed-color theming; removed legacy glass mode. Added artist profile with bio, audience, top songs, albums, singles. Search now includes Albums section. Improved navigation and mini-player spacing. Improved YouTube search reliability."
+  "win_url": "https://sourceforge.net/projects/hongeet/files/latest/download",
+  "notes": "New Windows Version available. Added DiscordRPC feature(experimental - Uses OAuth for Android & Discord IPC for windows). Fixed some minor bugs. Added new circle widget(for Android). Redesigned 2x2 & 4x2 widgets"
 }
