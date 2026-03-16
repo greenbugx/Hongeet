@@ -17,7 +17,8 @@
   [![License](https://img.shields.io/github/license/greenbugx/Hongeet?style=for-the-badge&color=black)](LICENSE)<br>
   [![Downloads Sourceforge](https://img.shields.io/sourceforge/dt/hongeet?style=for-the-badge&color=white&label=Downloads(SF))](https://sourceforge.net/projects/hongeet/)
   [![Downloads IzzyOnDroid](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=black&url=https://dlstats.izzyondroid.org/iod-stats-collector/stats/basic/monthly/rolling.json&query=$.['com.dxku.hongit']&label=DOWNLOADS(IZZY))](https://apt.izzysoft.de/packages/com.dxku.hongit)
-  <a href="https://github.com/greenbugx/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=white&label=DOWNLOADS(GH)" >
+  <a href="https://github.com/greenbugx/Hongeet/releases/latest"><img alt="GitHub Downloads" src="https://img.shields.io/github/downloads/greenbugx/Hongeet/total?style=for-the-badge&color=white&label=DOWNLOADS(GH)" ><br>
+  <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" > <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" />
   
 
   [![RB Status](https://shields.rbtlog.dev/simple/com.dxku.hongit?style=for-the-badge)](https://shields.rbtlog.dev/com.dxku.hongit)
