@@ -1186,11 +1186,19 @@ class YoutubeApi {
 
     final fallbackFromRuns = <String>{};
     for (final run in runs) {
-      final text = (_asMap(run)?['text'] ?? '').toString().trim();
+      final runMap = _asMap(run);
+      final text = (runMap?['text'] ?? '').toString().trim();
       if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) {
         continue;
       }
       if (_isLikelyNonArtistMetaText(text)) continue;
+      final runBrowse = _asMap(
+        _asMap(runMap?['navigationEndpoint'])?['browseEndpoint'],
+      );
+      final runPageType = _extractBrowsePageType(runBrowse).toUpperCase();
+      if (runPageType.contains('ALBUM') || runPageType.contains('PLAYLIST')) {
+        continue;
+      }
       fallbackFromRuns.add(text);
     }
     if (fallbackFromRuns.isNotEmpty) return fallbackFromRuns.join(', ');
