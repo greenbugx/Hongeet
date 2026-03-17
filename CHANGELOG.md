@@ -1,3 +1,24 @@
+# v1.8.0+19
+
+## Hongeet Windows Release + New Widgets + Experimental Discord RPC
+
+This release introduces the first **Windows build of Hongeet**, along with new & updated widgets(Android), and experimental integrations.
+
+## New Features
+
+- **Windows Version**  
+  Initial Windows build support for Hongeet.
+
+- **Discord Rich Presence (Experimental)**  
+  Optional Discord RPC support to display currently playing tracks in Discord.
+
+- **New Circle Widget(Android)**
+
+## Improvements
+
+- **Redesigned Existing Android Widgets**
+  Updated the looks of 2x2 & 4x2 widgets
+
 # v1.7.0+18
 
 ## Material 3 Refresh + Artist Profiles + Search Reliability
