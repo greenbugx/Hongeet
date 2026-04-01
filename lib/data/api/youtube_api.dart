@@ -800,6 +800,14 @@ class YoutubeApi {
     return out.take(take).toList(growable: false);
   }
 
+  static String _cleanYtmArtist(String raw) {
+    if (raw.isEmpty) return raw;
+    // take only what's before the first bullet
+    final bulletIndex = raw.indexOf('\u2022'); // •
+    final cleaned = bulletIndex >= 0 ? raw.substring(0, bulletIndex) : raw;
+    return cleaned.trim().replaceAll(RegExp(r',\s*$'), '').trim();
+  }
+
   static Future<Map<String, dynamic>> _postYtmSearch({
     required _YtmBootstrapCache bootstrap,
     required String query,
@@ -1022,7 +1030,7 @@ class YoutubeApi {
     final title = _extractYtmTitle(renderer);
     if (title.isEmpty) return null;
 
-    final artist = _extractYtmArtist(renderer);
+    final artist = _cleanYtmArtist(_extractYtmArtist(renderer));
     final duration = _extractYtmDurationSeconds(renderer);
     if (!_isLikelyYtmSong(title: title, artist: artist, duration: duration)) {
       return null;
@@ -1152,7 +1160,7 @@ class YoutubeApi {
       if (runMap == null) continue;
 
       final text = (runMap['text'] ?? '').toString().trim();
-      if (text.isEmpty || text == 'â€¢' || _looksLikeDurationText(text)) {
+      if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) {
         continue;
       }
 
@@ -1178,18 +1186,26 @@ class YoutubeApi {
 
     final fallbackFromRuns = <String>{};
     for (final run in runs) {
-      final text = (_asMap(run)?['text'] ?? '').toString().trim();
-      if (text.isEmpty || text == 'â€¢' || _looksLikeDurationText(text)) {
+      final runMap = _asMap(run);
+      final text = (runMap?['text'] ?? '').toString().trim();
+      if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) {
         continue;
       }
       if (_isLikelyNonArtistMetaText(text)) continue;
+      final runBrowse = _asMap(
+        _asMap(runMap?['navigationEndpoint'])?['browseEndpoint'],
+      );
+      final runPageType = _extractBrowsePageType(runBrowse).toUpperCase();
+      if (runPageType.contains('ALBUM') || runPageType.contains('PLAYLIST')) {
+        continue;
+      }
       fallbackFromRuns.add(text);
     }
     if (fallbackFromRuns.isNotEmpty) return fallbackFromRuns.join(', ');
 
     if (rawLine.isNotEmpty) {
       final pieces = rawLine
-          .split(RegExp(r'\s*[â€¢\u2022\|]\s*'))
+          .split(RegExp(r'\s*[•\u2022\|]\s*'))
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
           .where((s) => !_looksLikeDurationText(s))
@@ -1200,7 +1216,7 @@ class YoutubeApi {
 
     for (final run in runs) {
       final text = (_asMap(run)?['text'] ?? '').toString().trim();
-      if (text.isEmpty || text == 'â€¢' || _looksLikeDurationText(text)) {
+      if (text.isEmpty || text == '•' || _looksLikeDurationText(text)) {
         continue;
       }
       return text;

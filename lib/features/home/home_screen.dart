@@ -16,6 +16,7 @@ import '../../core/utils/streaming_preferences.dart';
 import '../../core/utils/youtube_thumbnail_utils.dart';
 import '../../core/widgets/fallback_network_image.dart';
 import '../../data/api/local_backend_api.dart';
+import '../../data/api/lyrics_service.dart';
 import '../../data/api/lrclib_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../library/playlist_manager.dart';
@@ -1994,7 +1995,7 @@ class _DesktopPanelFloatingButton extends StatelessWidget {
   }
 }
 
-class _DesktopLyricsPane extends StatelessWidget {
+class _DesktopLyricsPane extends StatefulWidget {
   final QueuedSong? song;
   final AudioPlayerService player;
 
@@ -2005,11 +2006,44 @@ class _DesktopLyricsPane extends StatelessWidget {
   });
 
   @override
+  State<_DesktopLyricsPane> createState() => _DesktopLyricsPaneState();
+}
+
+class _DesktopLyricsPaneState extends State<_DesktopLyricsPane> {
+  Future<LrcLibLyrics?>? _lyricsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopLyricsPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.song?.id != widget.song?.id) {
+      _fetchIfNeeded();
+    }
+  }
+
+  void _fetchIfNeeded() {
+    final song = widget.song;
+    if (song == null || song.isLocal) {
+      _lyricsFuture = null;
+      return;
+    }
+    _lyricsFuture = LyricsService.fetchBestLyrics(
+      title: song.meta.title,
+      artist: song.meta.artist,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final textTheme = theme.textTheme;
-    final activeSong = song;
+    final activeSong = widget.song;
 
     if (activeSong == null) {
       return Center(
@@ -2030,10 +2064,7 @@ class _DesktopLyricsPane extends StatelessWidget {
       );
     }
 
-    final lyricsFuture = LrcLibApi.fetchBestLyrics(
-      title: activeSong.meta.title,
-      artist: activeSong.meta.artist,
-    );
+    final lyricsFuture = _lyricsFuture;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2080,7 +2111,6 @@ class _DesktopLyricsPane extends StatelessWidget {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-
               if (snapshot.hasError) {
                 return Center(
                   child: Text(
@@ -2091,7 +2121,6 @@ class _DesktopLyricsPane extends StatelessWidget {
                   ),
                 );
               }
-
               final lyrics = snapshot.data;
               if (lyrics == null) {
                 return Center(
@@ -2104,7 +2133,6 @@ class _DesktopLyricsPane extends StatelessWidget {
                   ),
                 );
               }
-
               if (lyrics.instrumental) {
                 return Center(
                   child: Text(
@@ -2115,15 +2143,20 @@ class _DesktopLyricsPane extends StatelessWidget {
                   ),
                 );
               }
-
+              if (lyrics.hasWordSyncedLyrics) {
+                return _DesktopWordSyncedLyricsView(
+                  key: ValueKey(lyrics),
+                  wordLines: lyrics.wordLines!,
+                  player: widget.player,
+                );
+              }
               if (lyrics.hasSyncedLyrics) {
                 return _DesktopSyncedLyricsView(
                   key: ValueKey(lyrics),
                   lines: lyrics.parsedLines,
-                  player: player,
+                  player: widget.player,
                 );
               }
-
               final plain = lyrics.plainLyrics.trim();
               if (plain.isEmpty) {
                 return Center(
@@ -2135,7 +2168,6 @@ class _DesktopLyricsPane extends StatelessWidget {
                   ),
                 );
               }
-
               return SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 child: Text(
@@ -2322,6 +2354,246 @@ class _DesktopSyncedLyricsViewState extends State<_DesktopSyncedLyricsView>
                   );
                 }),
               ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DesktopWordSyncedLyricsView extends StatefulWidget {
+  final List<WordSyncedLine> wordLines;
+  final AudioPlayerService player;
+
+  const _DesktopWordSyncedLyricsView({
+    super.key,
+    required this.wordLines,
+    required this.player,
+  });
+
+  @override
+  State<_DesktopWordSyncedLyricsView> createState() =>
+      _DesktopWordSyncedLyricsViewState();
+}
+
+class _DesktopWordSyncedLyricsViewState
+    extends State<_DesktopWordSyncedLyricsView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late Animation<double> _lineIndexAnim;
+  StreamSubscription<Duration>? _positionSub;
+  int _activeLineIndex = 0;
+  int _activeWordIndex = -1;
+  static const double _lineHeight = 64.0; // desktop uses 64, mobile uses 72
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
+    final pos = widget.player.player.position;
+    final initLine = _findActiveLineIndex(pos);
+    _activeLineIndex = initLine;
+    _activeWordIndex = _findActiveWordIndex(initLine, pos);
+    _lineIndexAnim = _buildAnim(initLine.toDouble(), initLine.toDouble());
+    _positionSub = widget.player.positionStream.listen(_onPositionChanged);
+  }
+
+  Animation<double> _buildAnim(double from, double to) {
+    return Tween<double>(begin: from, end: to).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _DesktopWordSyncedLyricsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.player, widget.player)) {
+      _positionSub?.cancel();
+      _positionSub = widget.player.positionStream.listen(_onPositionChanged);
+    }
+    if (!identical(oldWidget.wordLines, widget.wordLines)) {
+      final pos = widget.player.player.position;
+      final idx = _findActiveLineIndex(pos);
+      _activeLineIndex = idx;
+      _activeWordIndex = _findActiveWordIndex(idx, pos);
+      _lineIndexAnim = _buildAnim(idx.toDouble(), idx.toDouble());
+      _animController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    _animController.dispose();
+    super.dispose();
+  }
+
+  int _findActiveLineIndex(Duration position) {
+    final lines = widget.wordLines;
+    if (lines.isEmpty) return 0;
+    final posMs = position.inMilliseconds;
+    var low = 0, high = lines.length - 1, result = 0;
+    while (low <= high) {
+      final mid = low + ((high - low) >> 1);
+      if (lines[mid].start.inMilliseconds <= posMs) {
+        result = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return result.clamp(0, lines.length - 1);
+  }
+
+  int _findActiveWordIndex(int lineIndex, Duration position) {
+    if (lineIndex < 0 || lineIndex >= widget.wordLines.length) return -1;
+    final words = widget.wordLines[lineIndex].words;
+    if (words.isEmpty) return -1;
+    final posMs = position.inMilliseconds;
+    var result = -1;
+    for (var i = 0; i < words.length; i++) {
+      if (words[i].start.inMilliseconds <= posMs) {
+        result = i;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+
+  void _onPositionChanged(Duration position) {
+    if (!mounted || widget.wordLines.isEmpty) return;
+    final newLine = _findActiveLineIndex(position);
+    final newWord = _findActiveWordIndex(newLine, position);
+    if (newLine == _activeLineIndex && newWord == _activeWordIndex) return;
+
+    setState(() {
+      if (newLine != _activeLineIndex) {
+        final from = _lineIndexAnim.value;
+        _activeLineIndex = newLine;
+        _lineIndexAnim = _buildAnim(from, newLine.toDouble());
+        _animController
+          ..reset()
+          ..forward();
+      }
+      _activeWordIndex = newWord;
+    });
+  }
+
+  Widget _buildActiveLineText(WordSyncedLine line, ColorScheme scheme) {
+    if (line.words.isEmpty) {
+      return Text(
+        line.fullText,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 17,
+          height: 1.3,
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface,
+        ),
+      );
+    }
+
+    final spans = <InlineSpan>[];
+    for (var i = 0; i < line.words.length; i++) {
+      final Color color;
+      if (_activeWordIndex < 0) {
+        color = scheme.onSurface.withValues(alpha: 0.45);
+      } else if (i < _activeWordIndex) {
+        color = scheme.onSurface;
+      } else if (i == _activeWordIndex) {
+        color = scheme.primary;
+      } else {
+        color = scheme.onSurface.withValues(alpha: 0.45);
+      }
+
+      spans.add(
+        TextSpan(
+          text: line.words[i].text,
+          style: TextStyle(
+            fontSize: 17,
+            height: 1.3,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      );
+    }
+
+    return Text.rich(TextSpan(children: spans), textAlign: TextAlign.center);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final centerY = constraints.maxHeight / 2 - _lineHeight / 2;
+        return ShaderMask(
+          shaderCallback: (rect) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.black,
+              Colors.black,
+              Colors.transparent,
+            ],
+            stops: [0.0, 0.20, 0.80, 1.0],
+          ).createShader(rect),
+          blendMode: BlendMode.dstIn,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _lineIndexAnim,
+              builder: (context, _) {
+                final translateY = centerY - _lineIndexAnim.value * _lineHeight;
+                return OverflowBox(
+                  maxHeight: double.infinity,
+                  alignment: Alignment.topCenter,
+                  child: Transform.translate(
+                    offset: Offset(0, translateY),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(widget.wordLines.length, (index) {
+                        final isActive = index == _activeLineIndex;
+                        final distance = (index - _activeLineIndex).abs();
+                        final opacity = isActive
+                            ? 1.0
+                            : (distance <= 1
+                                  ? 0.48
+                                  : (distance <= 3 ? 0.28 : 0.14));
+                        final line = widget.wordLines[index];
+
+                        return SizedBox(
+                          height: _lineHeight,
+                          child: Center(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 280),
+                              opacity: opacity,
+                              child: isActive
+                                  ? _buildActiveLineText(line, scheme)
+                                  : Text(
+                                      line.fullText,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        height: 1.3,
+                                        fontWeight: FontWeight.w500,
+                                        color: scheme.onSurface,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         );

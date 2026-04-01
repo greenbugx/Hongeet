@@ -2,9 +2,37 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../../core/utils/app_logger.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+
+class WordSegment {
+  final Duration start;
+  final Duration end;
+  final String text;
+
+  const WordSegment({
+    required this.start,
+    required this.end,
+    required this.text,
+  });
+}
+
+class WordSyncedLine {
+  final Duration start;
+  final Duration end;
+  final String fullText;
+  final List<WordSegment> words;
+
+  const WordSyncedLine({
+    required this.start,
+    required this.end,
+    required this.fullText,
+    required this.words,
+  });
+}
 
 class LyricLine {
   final Duration start;
@@ -23,6 +51,8 @@ class LrcLibLyrics {
   final String? syncedLyrics;
   final List<LyricLine> parsedLines;
 
+  final List<WordSyncedLine>? wordLines;
+
   const LrcLibLyrics({
     required this.trackName,
     required this.artistName,
@@ -32,7 +62,10 @@ class LrcLibLyrics {
     required this.plainLyrics,
     required this.syncedLyrics,
     required this.parsedLines,
+    this.wordLines,
   });
+
+  bool get hasWordSyncedLyrics => wordLines != null && wordLines!.isNotEmpty;
 
   bool get hasSyncedLyrics => parsedLines.isNotEmpty;
 }
@@ -103,7 +136,6 @@ class LrcLibApi {
     int? durationSeconds,
     String? album,
   }) async {
-    // LRCLib fallback with multiple query variants
     final variants = _buildQueryVariants(
       title: title,
       artist: artist,
@@ -151,6 +183,12 @@ class LrcLibApi {
     final normalizedTitle = _normalize(_cleanTitleForQuery(title));
     final normalizedArtist = _normalize(_cleanArtistForQuery(artist));
 
+    AppLogger.info(
+      '[LrcLib] Scoring ${deduped.length} candidates for '
+      '"$title" by "$artist" '
+      '(query title: "$normalizedTitle", query artist: "$normalizedArtist")',
+    );
+
     Map<String, dynamic>? best;
     var bestScore = -1 << 30;
     for (final item in deduped) {
@@ -160,6 +198,17 @@ class LrcLibApi {
         normalizedArtist: normalizedArtist,
         durationSeconds: durationSeconds,
       );
+
+      final candidateTitle = (item['trackName'] ?? '').toString().trim();
+      final candidateArtist = (item['artistName'] ?? '').toString().trim();
+      final hasSynced =
+          ((item['syncedLyrics'] ?? '').toString().trim()).isNotEmpty;
+      AppLogger.info(
+        '[LrcLib]   score=$score  '
+        '"$candidateTitle" — "$candidateArtist"  '
+        '(synced: $hasSynced)',
+      );
+
       if (score > bestScore) {
         bestScore = score;
         best = item;
@@ -167,6 +216,14 @@ class LrcLibApi {
     }
 
     if (best == null) return null;
+
+    final pickedTitle = (best['trackName'] ?? '').toString().trim();
+    final pickedArtist = (best['artistName'] ?? '').toString().trim();
+    AppLogger.info(
+      '[LrcLib] Picked: "$pickedTitle" — "$pickedArtist"  '
+      '(score: $bestScore)',
+    );
+
     return _parseLyrics(best);
   }
 
@@ -316,7 +373,16 @@ class LrcLibApi {
 
   static LrcLibLyrics _parseLyrics(Map<String, dynamic> raw) {
     final plainLyrics = (raw['plainLyrics'] ?? '').toString();
-    final syncedLyrics = (raw['syncedLyrics'] ?? '').toString().trim();
+    var syncedLyrics = (raw['syncedLyrics'] ?? '').toString().trim();
+
+    if (syncedLyrics.isEmpty && _looksLikeLrc(plainLyrics)) {
+      AppLogger.info(
+        '[LrcLib] plainLyrics looks like LRC — promoting to syncedLyrics for '
+        '"${(raw["trackName"] ?? "").toString().trim()}"',
+      );
+      syncedLyrics = plainLyrics.trim();
+    }
+
     final parsed = _parseSyncedLyrics(
       syncedLyrics.isEmpty ? null : syncedLyrics,
     );
@@ -330,6 +396,18 @@ class LrcLibApi {
       syncedLyrics: syncedLyrics.isEmpty ? null : syncedLyrics,
       parsedLines: parsed,
     );
+  }
+
+  static bool _looksLikeLrc(String text) {
+    if (text.trim().isEmpty) return false;
+    final timestampRegex = RegExp(r'^\[\d{1,2}:\d{2}');
+    var matches = 0;
+    for (final line in text.split('\n')) {
+      if (timestampRegex.hasMatch(line.trim())) {
+        if (++matches >= 3) return true;
+      }
+    }
+    return false;
   }
 
   static List<LyricLine> _parseSyncedLyrics(String? syncedLyrics) {
@@ -673,6 +751,7 @@ class _CachedLyrics {
       plainLyrics: (lyricsMap['plainLyrics'] ?? '').toString(),
       syncedLyrics: synced.isEmpty ? null : synced,
       parsedLines: parsed,
+      // wordLines intentionally omitted
     );
     return _CachedLyrics(lyrics: lyrics, cachedAt: cachedAt);
   }

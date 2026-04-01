@@ -14,6 +14,7 @@ import '../../core/utils/audio_player_service.dart';
 import '../../core/utils/themed_container.dart';
 import '../../core/utils/streaming_preferences.dart';
 import '../../data/api/local_backend_api.dart';
+import '../../data/api/lyrics_service.dart';
 import '../../data/api/lrclib_api.dart';
 import '../../data/api/youtube_song_api.dart';
 import '../../core/utils/app_messenger.dart';
@@ -1724,7 +1725,7 @@ class _SwipeLyricsPlayerCardState extends State<_SwipeLyricsPlayerCard>
       return;
     }
 
-    _lyricsFuture = LrcLibApi.fetchBestLyrics(
+    _lyricsFuture = LyricsService.fetchBestLyrics(
       title: song.meta.title,
       artist: song.meta.artist,
     );
@@ -1965,6 +1966,16 @@ class _LyricsBackCard extends StatelessWidget {
                       );
                     }
 
+                    // word-level
+                    if (lyrics.hasWordSyncedLyrics) {
+                      return _WordSyncedLyricsView(
+                        key: ValueKey(lyrics),
+                        wordLines: lyrics.wordLines!,
+                        player: player,
+                      );
+                    }
+
+                    // line-level karaoke
                     if (lyrics.hasSyncedLyrics) {
                       return _SyncedLyricsView(
                         key: ValueKey(lyrics),
@@ -1973,6 +1984,7 @@ class _LyricsBackCard extends StatelessWidget {
                       );
                     }
 
+                    // plain text
                     final plain = lyrics.plainLyrics.trim();
                     if (plain.isEmpty) {
                       return Center(
@@ -2184,6 +2196,247 @@ class _SyncedLyricsViewState extends State<_SyncedLyricsView>
                   );
                 }),
               ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WordSyncedLyricsView extends StatefulWidget {
+  final List<WordSyncedLine> wordLines;
+  final AudioPlayerService player;
+
+  const _WordSyncedLyricsView({
+    super.key,
+    required this.wordLines,
+    required this.player,
+  });
+
+  @override
+  State<_WordSyncedLyricsView> createState() => _WordSyncedLyricsViewState();
+}
+
+class _WordSyncedLyricsViewState extends State<_WordSyncedLyricsView>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late Animation<double> _lineIndexAnim;
+  StreamSubscription<Duration>? _positionSub;
+  int _activeLineIndex = 0;
+  int _activeWordIndex = -1;
+  static const double _lineHeight = 72.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    final pos = widget.player.player.position;
+    final initLine = _findActiveLineIndex(pos);
+    _activeLineIndex = initLine;
+    _activeWordIndex = _findActiveWordIndex(initLine, pos);
+    _lineIndexAnim = _buildAnim(initLine.toDouble(), initLine.toDouble());
+    _positionSub = widget.player.positionStream.listen(_onPositionChanged);
+  }
+
+  Animation<double> _buildAnim(double from, double to) {
+    return Tween<double>(begin: from, end: to).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeOutCubic),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _WordSyncedLyricsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.player, widget.player)) {
+      _positionSub?.cancel();
+      _positionSub = widget.player.positionStream.listen(_onPositionChanged);
+    }
+    if (!identical(oldWidget.wordLines, widget.wordLines)) {
+      final pos = widget.player.player.position;
+      final idx = _findActiveLineIndex(pos);
+      _activeLineIndex = idx;
+      _activeWordIndex = _findActiveWordIndex(idx, pos);
+      _lineIndexAnim = _buildAnim(idx.toDouble(), idx.toDouble());
+      _animController.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    _animController.dispose();
+    super.dispose();
+  }
+
+  int _findActiveLineIndex(Duration position) {
+    final lines = widget.wordLines;
+    if (lines.isEmpty) return 0;
+    final posMs = position.inMilliseconds;
+    var low = 0, high = lines.length - 1, result = 0;
+    while (low <= high) {
+      final mid = low + ((high - low) >> 1);
+      if (lines[mid].start.inMilliseconds <= posMs) {
+        result = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return result.clamp(0, lines.length - 1);
+  }
+
+  int _findActiveWordIndex(int lineIndex, Duration position) {
+    if (lineIndex < 0 || lineIndex >= widget.wordLines.length) return -1;
+    final words = widget.wordLines[lineIndex].words;
+    if (words.isEmpty) return -1;
+    final posMs = position.inMilliseconds;
+    var result = -1;
+    for (var i = 0; i < words.length; i++) {
+      if (words[i].start.inMilliseconds <= posMs) {
+        result = i;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
+
+  void _onPositionChanged(Duration position) {
+    if (!mounted || widget.wordLines.isEmpty) return;
+    final newLine = _findActiveLineIndex(position);
+    final newWord = _findActiveWordIndex(newLine, position);
+    if (newLine == _activeLineIndex && newWord == _activeWordIndex) return;
+
+    setState(() {
+      if (newLine != _activeLineIndex) {
+        final from = _lineIndexAnim.value;
+        _activeLineIndex = newLine;
+        _lineIndexAnim = _buildAnim(from, newLine.toDouble());
+        _animController
+          ..reset()
+          ..forward();
+      }
+      _activeWordIndex = newWord;
+    });
+  }
+
+  Widget _buildActiveLineText(WordSyncedLine line, ColorScheme scheme) {
+    if (line.words.isEmpty) {
+      return Text(
+        line.fullText,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 17,
+          height: 1.3,
+          fontFamily: 'Helvetica',
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface,
+        ),
+      );
+    }
+
+    final spans = <InlineSpan>[];
+    for (var i = 0; i < line.words.length; i++) {
+      final Color color;
+      if (_activeWordIndex < 0) {
+        color = scheme.onSurface.withValues(alpha: 0.45);
+      } else if (i < _activeWordIndex) {
+        color = scheme.onSurface; // already spoken
+      } else if (i == _activeWordIndex) {
+        color = scheme.primary; // currently speaking
+      } else {
+        color = scheme.onSurface.withValues(alpha: 0.45); // upcoming
+      }
+
+      spans.add(
+        TextSpan(
+          text: line.words[i].text,
+          style: TextStyle(
+            fontSize: 17,
+            height: 1.3,
+            fontFamily: 'Helvetica',
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      );
+    }
+
+    return Text.rich(TextSpan(children: spans), textAlign: TextAlign.center);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final centerY = constraints.maxHeight / 2 - _lineHeight / 2;
+        return ShaderMask(
+          shaderCallback: (rect) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.black,
+              Colors.black,
+              Colors.transparent,
+            ],
+            stops: [0.0, 0.22, 0.78, 1.0],
+          ).createShader(rect),
+          blendMode: BlendMode.dstIn,
+          child: ClipRect(
+            child: AnimatedBuilder(
+              animation: _lineIndexAnim,
+              builder: (context, _) {
+                final translateY = centerY - _lineIndexAnim.value * _lineHeight;
+                return OverflowBox(
+                  maxHeight: double.infinity,
+                  alignment: Alignment.topCenter,
+                  child: Transform.translate(
+                    offset: Offset(0, translateY),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(widget.wordLines.length, (index) {
+                        final isActive = index == _activeLineIndex;
+                        final distance = (index - _activeLineIndex).abs();
+                        final opacity = isActive
+                            ? 1.0
+                            : (distance <= 1
+                                  ? 0.45
+                                  : (distance <= 3 ? 0.25 : 0.12));
+                        final line = widget.wordLines[index];
+
+                        return SizedBox(
+                          height: _lineHeight,
+                          child: Center(
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 300),
+                              opacity: opacity,
+                              child: isActive
+                                  ? _buildActiveLineText(line, scheme)
+                                  : Text(
+                                      line.fullText,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        height: 1.3,
+                                        fontFamily: 'Helvetica',
+                                        fontWeight: FontWeight.w400,
+                                        color: scheme.onSurface,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
         );
