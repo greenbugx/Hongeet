@@ -1,3 +1,9 @@
+> [!WARNING]
+> Hongeet is no longer actively maintained.
+> Development has moved to a new application — you can find it [here](https://github.com/SonexaMusic)
+
+
+
 <div align="center">
 
   <img src="assets/banner/latest_banner.png" alt="Hongeet Banner" width="100%" />
